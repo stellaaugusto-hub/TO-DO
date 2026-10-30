@@ -687,7 +687,8 @@ export function extractTasks(msg, opts = {}) {
   let forwarded = false;
   let contextSender = senderFirstName;
   let forwardOnly = false;
-  if (source === 'mail') {
+  if (source === 'mail' || source === 'manual') {
+    // texte collé : on retire aussi signatures, citations et mentions légales
     const cleaned = cleanEmailBody({ text: msg.text, html: msg.html });
     body = cleaned.body;
     forwarded = cleaned.forwarded;
