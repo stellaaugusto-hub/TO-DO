@@ -210,7 +210,34 @@ async function refreshCalendar(session) {
   return events;
 }
 
-/** Connexion : fenêtre Chrome normale, puis vérification sans fenêtre. */
+/** Explication lisible d'une vérification de session ratée (pour l'écran d'erreur et les journaux). */
+function describeCheck(c) {
+  const names = c.cookies || [];
+  const hasSid = names.some((n) => /^(SID|__Secure-1PSID|SAPISID)$/.test(n));
+  if (c.state === 'timeout') return { error: "Gmail n'a pas répondu à temps. Vérifie ta connexion internet puis réessaie.", detail: `page : ${c.landing}` };
+  if (!hasSid) return { error: "Chrome n'a pas gardé ta connexion Google. Reconnecte-toi : cette fois QuestFlow attend que tout soit bien enregistré.", detail: `page : ${c.landing} · cookies Google : ${names.length}` };
+  return { error: 'Google a demandé de confirmer ta connexion. Reconnecte-toi dans la fenêtre Chrome.', detail: `page : ${c.landing} · cookies Google : ${names.length} (${names.filter((n) => /SID|APISID/.test(n)).join(', ')})` };
+}
+
+function markConnected(c) {
+  store.update((s) => {
+    s.google.connected = true;
+    s.google.method = 'chrome';
+    s.google.lastError = null;
+    s.google.lastCheck = { at: new Date().toISOString(), ok: true };
+    if (c.email) s.google.email = c.email;
+    s.google.profile = { ...(s.google.profile || {}), email: c.email || s.google.email };
+  });
+  changed();
+  // nom affiché et agenda, en arrière-plan
+  fetchProfile(chrome).then((account) => { if (account?.name) { store.update((s) => { s.google.profile = { ...(s.google.profile || {}), ...account }; }); changed(); } }).catch(() => {});
+  chrome.run((session) => refreshCalendar(session)).catch((e) => log.warn(`agenda: ${e.message}`));
+}
+
+/**
+ * Connexion. D'abord on regarde si le Chrome de QuestFlow est déjà connecté (aucune fenêtre).
+ * Sinon : fenêtre Chrome normale pour te connecter, fermée proprement, puis vérification.
+ */
 async function connectGoogle() {
   const phase = (p) => send('google:login', p);
   if (!findChrome()) {
@@ -221,6 +248,18 @@ async function connectGoogle() {
     }
   }
   try {
+    if (chrome.hasSession()) {
+      phase({ phase: 'checking' });
+      const c = await chrome.checkSession().catch((e) => ({ ok: false, state: 'error', error: e.message, cookies: [] }));
+      log.info(`session existante : ${c.ok ? 'valide' : `${c.state} (${c.landing || c.error})`}`);
+      if (c.ok) {
+        markConnected(c);
+        phase({ phase: 'done', email: c.email, already: true });
+        return { connected: true, email: c.email };
+      }
+      // Session refusée par Google : on efface ces cookies inutiles pour repartir d'une connexion propre.
+      if (c.state === 'login') await chrome.clearCookies();
+    }
     phase({ phase: 'opening' });
     const reason = await chrome.login({ onPhase: phase });
     focusWindow();
@@ -229,23 +268,22 @@ async function connectGoogle() {
       return { connected: false, code: 'CANCELLED', error: 'annulée' };
     }
     phase({ phase: 'verifying' });
-    const account = await fetchProfile(chrome);
-    store.update((s) => {
-      s.google.connected = true;
-      s.google.method = 'chrome';
-      s.google.lastError = null;
-      if (account.email) s.google.email = account.email;
-      s.google.profile = { ...(s.google.profile || {}), ...account };
-    });
+    const c = await chrome.checkSession();
+    log.info(`vérification après connexion : ${c.ok ? 'ok' : c.state} · ${c.landing} · cookies google : ${(c.cookies || []).join(',')}`);
+    if (c.ok) {
+      markConnected(c);
+      phase({ phase: 'done', email: c.email });
+      return { connected: true, email: c.email };
+    }
+    const d = describeCheck(c);
+    store.update((s) => { s.google.connected = false; s.google.lastCheck = { at: new Date().toISOString(), ok: false, ...d, state: c.state, landing: c.landing, cookies: c.cookies }; });
     changed();
-    phase({ phase: 'done', email: account.email });
-    chrome.run((session) => refreshCalendar(session)).catch((e) => log.warn(`agenda: ${e.message}`));
-    return { connected: true, email: account.email };
+    phase({ phase: 'error', code: 'NOT_LOGGED_IN', error: d.error, detail: d.detail });
+    return { connected: false, code: 'NOT_LOGGED_IN', error: d.error };
   } catch (e) {
-    log.warn(`google connect: ${e.message}`);
+    log.warn(`google connect: ${e.stack || e.message}`);
     focusWindow();
-    const notLogged = e.code === 'NOT_LOGGED_IN';
-    phase({ phase: 'error', code: e.code, error: notLogged ? "Connexion non détectée : connecte-toi dans la fenêtre Chrome avant de la fermer." : e.message });
+    phase({ phase: 'error', code: e.code, error: e.message });
     store.update((s) => { s.google.connected = false; });
     changed();
     return { connected: false, code: e.code, error: e.message };
@@ -509,6 +547,12 @@ app.whenReady().then(async () => {
   log.info(`QuestFlow ${app.getVersion()} (${process.platform}/${process.arch}) démarre`);
 
   chrome = new ChromeSession({ dir: path.join(app.getPath('userData'), 'chrome-profile'), log, diagDir: path.join(app.getPath('userData'), 'logs') });
+  // Si QuestFlow était au premier plan, il le reste quand Chrome démarre en arrière-plan.
+  let wasFocused = false;
+  chrome.on('launching', () => { wasFocused = !!win && !win.isDestroyed() && win.isFocused(); });
+  chrome.on('launched', () => {
+    if (wasFocused) setTimeout(() => { if (!win.isDestroyed() && !win.isFocused()) app.focus({ steal: true }); }, 300);
+  });
 
   updater = new Updater({ owner: pkg.questflow?.githubOwner, repo: pkg.questflow?.githubRepo || 'questflow', log });
   updater.on('status', (s) => send('updater:status', s));
@@ -557,7 +601,13 @@ app.on('activate', focusWindow);
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-app.on('before-quit', () => {
-  chrome?.killNow();
+// À la fermeture : on laisse le Chrome de QuestFlow se fermer proprement (il enregistre ses
+// cookies Google), sinon la session pourrait être perdue.
+let quitting = false;
+app.on('before-quit', (e) => {
   store?.save(true);
+  if (quitting || !chrome?.busy) return;
+  e.preventDefault();
+  quitting = true;
+  Promise.race([chrome.shutdown(), new Promise((r) => setTimeout(r, 25000))]).finally(() => app.quit());
 });

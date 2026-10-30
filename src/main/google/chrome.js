@@ -73,10 +73,13 @@ function chromeEnv() {
   return env;
 }
 
-// Options communes aux deux modes. --use-mock-keychain : le Chrome sans fenêtre
-// et la fenêtre de connexion chiffrent les cookies avec la même clé, sans
-// demande d'accès au trousseau macOS.
-const COMMON_ARGS = ['--no-first-run', '--no-default-browser-check', '--use-mock-keychain', '--disable-search-engine-choice-screen', '--profile-directory=Default'];
+// Options communes. La fenêtre de connexion et le Chrome de lecture sont le même
+// Chrome, normal (pas de mode headless), sur le même profil : Google voit toujours
+// le même navigateur, et les cookies sont chiffrés comme dans un Chrome habituel.
+export const COMMON_ARGS = ['--no-first-run', '--no-default-browser-check', '--disable-search-engine-choice-screen', '--profile-directory=Default'];
+// Lecture : pas de fenêtre au démarrage, et les onglets restent actifs même cachés.
+export const READ_ARGS = ['--no-startup-window', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--mute-audio'];
+const testArgs = () => (process.env.QF_CHROME_EXTRA ? process.env.QF_CHROME_EXTRA.trim().split(/\s+(?=--)/) : []); // tests uniquement
 
 // ---------------------------------------------------------------------------
 // Protocole DevTools sur tube (messages JSON séparés par \0)
@@ -329,8 +332,8 @@ export class ChromeSession extends EventEmitter {
     if (!bin) throw new NoChromeError();
     fs.mkdirSync(this.dir, { recursive: true, mode: 0o700 });
     await this._freeProfile();
-    const args = ['--headless=new', '--remote-debugging-pipe', `--user-data-dir=${this.dir}`, ...COMMON_ARGS, '--window-size=1440,1000', '--mute-audio', '--hide-scrollbars', 'about:blank'];
-    if (process.env.QF_CHROME_EXTRA) args.unshift(...process.env.QF_CHROME_EXTRA.trim().split(/\s+(?=--)/)); // tests
+    const args = [...testArgs(), '--remote-debugging-pipe', `--user-data-dir=${this.dir}`, ...COMMON_ARGS, ...READ_ARGS];
+    this.emit('launching');
     const proc = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'], env: chromeEnv() });
     const errTail = [];
     proc.stderr.setEncoding('utf8');
@@ -341,7 +344,16 @@ export class ChromeSession extends EventEmitter {
     proc.on('exit', () => { if (this.browser?.proc === proc) this.browser = null; cdp._close(); });
     try {
       const v = await cdp.send('Browser.getVersion', {}, undefined, 20e3);
-      this.log?.info(`chrome sans fenêtre : ${v.product}`);
+      this.log?.info(`chrome (lecture, sans fenêtre visible) : ${v.product}`);
+      // Une fenêtre « support » posée hors de l'écran : les pages s'y ouvrent en onglets.
+      const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank', newWindow: true, background: true, left: -32000, top: -32000, width: 1280, height: 900 });
+      const win = await cdp.send('Browser.getWindowForTarget', { targetId }).catch(() => null);
+      if (win && win.bounds && win.bounds.left > -2000) {
+        // Le système a ramené la fenêtre à l'écran : on la réduit dans le Dock.
+        await cdp.send('Browser.setWindowBounds', { windowId: win.windowId, bounds: { windowState: 'minimized' } }).catch(() => {});
+      }
+      this.browser.anchor = targetId;
+      this.emit('launched');
     } catch (e) {
       this.log?.warn(`chrome n'a pas démarré : ${errTail.join('').slice(-800)}`);
       proc.kill('SIGKILL');
@@ -358,8 +370,8 @@ export class ChromeSession extends EventEmitter {
     if (!pid || pid === process.pid) return;
     try { process.kill(pid, 0); } catch { return; } // processus mort : Chrome nettoiera le verrou
     this.log?.info(`chrome ${pid} utilise encore le profil QuestFlow : fermeture`);
-    try { process.kill(pid, 'SIGTERM'); } catch { return; }
-    for (let i = 0; i < 40; i++) {
+    try { process.kill(pid, 'SIGINT'); } catch { return; }
+    for (let i = 0; i < 80; i++) {
       await sleep(250);
       try { process.kill(pid, 0); } catch { return; }
     }
@@ -369,12 +381,50 @@ export class ChromeSession extends EventEmitter {
 
   async newTab() {
     const { cdp } = this.browser;
-    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank' });
+    const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank', background: true });
     const { sessionId } = await cdp.send('Target.attachToTarget', { targetId, flatten: true });
     const tab = new Tab(cdp, targetId, sessionId);
     await tab.send('Page.enable');
     await tab.send('Runtime.enable');
+    await tab.send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
     return tab;
+  }
+
+  /** Noms des cookies Google présents (jamais leurs valeurs) : pour comprendre un échec de connexion. */
+  async googleCookieNames() {
+    try {
+      const { cookies } = await this.browser.cdp.send('Storage.getCookies', {});
+      return [...new Set(cookies.filter((c) => /(^|\.)google\.com$/.test(c.domain)).map((c) => c.name))].sort();
+    } catch {
+      return null;
+    }
+  }
+
+  /** Vérifie la session Google dans le Chrome de lecture : { ok, email, name, landing, cookies }. */
+  async checkSession() {
+    return this.run(async () => {
+      const tab = await this.newTab();
+      try {
+        await tab.goto('https://mail.google.com/mail/u/0/#inbox');
+        const probe = `() => { if ((${onLoginPage})()) return 'login'; const m = document.querySelector('div[role="main"]'); return m && (m.querySelector('tr.zA') || m.querySelector('td.TC') || /@/.test(document.title)) ? 'ready' : null; }`;
+        const state = await tab.waitFor(probe, [], { timeout: 45e3 });
+        const info = await tab.evaluate(() => ({ host: location.host, path: location.pathname, title: document.title, email: (document.title.match(/[\w.+-]+@[\w-]+(?:\.[\w-]+)+/) || [])[0] || null })).catch(() => ({}));
+        const cookies = await this.googleCookieNames();
+        const landing = `${info.host || '?'}${info.path || ''}`;
+        if (state !== 'ready') await this.diagnose(tab, state === 'login' ? 'connexion' : 'gmail');
+        return { ok: state === 'ready', state: state || 'timeout', email: info.email, title: info.title, landing, cookies };
+      } finally {
+        await tab.close();
+      }
+    });
+  }
+
+  /** Efface les cookies de ce profil (session refusée par Google) pour repartir d'une connexion propre. */
+  async clearCookies() {
+    await this.queue;
+    await this.closeBrowser();
+    await this._freeProfile();
+    for (const f of ['Default/Network/Cookies', 'Default/Network/Cookies-journal', 'Default/Cookies', 'Default/Cookies-journal']) fs.rmSync(path.join(this.dir, f), { force: true });
   }
 
   /** Ouvre une page Google dans un onglet sans fenêtre et vérifie qu'on est connecté. */
@@ -414,7 +464,7 @@ export class ChromeSession extends EventEmitter {
     this.browser = null;
     const exited = new Promise((r) => (b.proc.exitCode !== null ? r() : b.proc.once('exit', r)));
     b.cdp.send('Browser.close', {}, undefined, 3000).catch(() => {});
-    await Promise.race([exited, sleep(4000)]);
+    await Promise.race([exited, sleep(20000)]);
     if (b.proc.exitCode === null) b.proc.kill('SIGKILL');
   }
 
@@ -439,7 +489,7 @@ export class ChromeSession extends EventEmitter {
     await this._freeProfile();
     const hadSession = this.hasSession();
     const url = `https://accounts.google.com/ServiceLogin?hl=fr&continue=${encodeURIComponent('https://mail.google.com/mail/u/0/')}`;
-    const proc = spawn(bin, [`--user-data-dir=${this.dir}`, ...COMMON_ARGS, '--window-size=1080,860', '--new-window', url], { stdio: 'ignore', env: chromeEnv() });
+    const proc = spawn(bin, [...testArgs(), `--user-data-dir=${this.dir}`, ...COMMON_ARGS, '--window-size=1080,860', '--new-window', url], { stdio: 'ignore', env: chromeEnv() });
     const v = { proc, kind: 'login', reason: null };
     this.visible = v;
     onPhase({ phase: 'waiting' });
@@ -472,12 +522,16 @@ export class ChromeSession extends EventEmitter {
     if (this.visible === v) this.visible = null;
   }
 
-  /** Fermeture propre (Chrome enregistre ses cookies), puis forcée si besoin. */
+  /**
+   * Fermeture propre de la fenêtre de connexion. SIGINT, comme ⌘Q : Chrome enregistre tous
+   * ses cookies avant de quitter (avec SIGTERM, il quitte en urgence et peut perdre les
+   * derniers cookies Google, ce qui fait tomber la session).
+   */
   async _stop(proc) {
     if (proc.exitCode !== null) return;
     const exited = new Promise((r) => proc.once('exit', r));
-    proc.kill('SIGTERM');
-    await Promise.race([exited, sleep(8000)]);
+    proc.kill('SIGINT');
+    await Promise.race([exited, sleep(20000)]);
     if (proc.exitCode === null) proc.kill('SIGKILL');
   }
 
@@ -493,7 +547,7 @@ export class ChromeSession extends EventEmitter {
     await this.closeBrowser();
     await this.endVisible();
     await this._freeProfile();
-    const proc = spawn(bin, ['--remote-debugging-pipe', `--user-data-dir=${this.dir}`, ...COMMON_ARGS, '--window-size=1180,860', 'about:blank'], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], env: chromeEnv() });
+    const proc = spawn(bin, [...testArgs(), '--remote-debugging-pipe', `--user-data-dir=${this.dir}`, ...COMMON_ARGS, '--window-size=1180,860', 'about:blank'], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], env: chromeEnv() });
     const v = { proc, kind: 'assist', reason: null };
     this.visible = v;
     const cdp = new Cdp(proc.stdio[3], proc.stdio[4]);
@@ -519,15 +573,15 @@ export class ChromeSession extends EventEmitter {
       return v.reason || result;
     } finally {
       cdp.send('Browser.close', {}, undefined, 3000).catch(() => {});
-      await Promise.race([new Promise((r) => (proc.exitCode !== null ? r() : proc.once('exit', r))), sleep(4000)]);
+      await Promise.race([new Promise((r) => (proc.exitCode !== null ? r() : proc.once('exit', r))), sleep(20000)]);
       if (proc.exitCode === null) proc.kill('SIGKILL');
       if (this.visible === v) this.visible = null;
     }
   }
 
-  /** À la fermeture de QuestFlow : on n'attend pas, on arrête tout. */
-  killNow() {
-    for (const proc of [this.browser?.proc, this.visible?.proc]) if (proc && proc.exitCode === null) proc.kill('SIGTERM');
+  /** Un Chrome de QuestFlow tourne-t-il encore ? */
+  get busy() {
+    return !!(this.browser || this.visible);
   }
 
   async shutdown() {

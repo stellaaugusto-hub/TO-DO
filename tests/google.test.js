@@ -5,7 +5,7 @@ import { mentionsMe, cleanMention } from '../src/main/google/chat.js';
 import { eventsFromZip, templateUrl, assistUrl } from '../src/main/google/calendar.js';
 import { parseIcs, expandCalendar, zonedToUtc, calendarIdFromFile, parseLine } from '../src/main/google/ics.js';
 import { unzip } from '../src/main/google/zip.js';
-import { onLoginPage } from '../src/main/google/chrome.js';
+import { onLoginPage, COMMON_ARGS, READ_ARGS } from '../src/main/google/chrome.js';
 import { extractTasks } from '../src/shared/extract.js';
 import { compareVersions } from '../src/shared/version.js';
 
@@ -80,6 +80,15 @@ describe('Google Chat (lu dans Chrome)', () => {
 });
 
 describe('Chrome', () => {
+  it('lecture avec un Chrome normal : ni mode headless, ni trousseau factice', () => {
+    // Le mode headless s'annonce « HeadlessChrome » à Google, et un trousseau différent
+    // entre la connexion et la lecture rend les cookies illisibles : la session tombe.
+    const all = [...COMMON_ARGS, ...READ_ARGS];
+    expect(all.some((a) => a.startsWith('--headless'))).toBe(false);
+    expect(all).not.toContain('--use-mock-keychain');
+    expect(READ_ARGS).toContain('--no-startup-window');
+  });
+
   it('page de connexion Google détectée', () => {
     const at = (href) => {
       const u = new URL(href);

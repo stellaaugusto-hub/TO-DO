@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 1.2.0
+- Connexion Google qui reste enregistrée : plus besoin de retaper ton mot de passe.
+- La fenêtre de connexion se ferme proprement (comme ⌘Q) : Chrome enregistre bien ta session avant de quitter. Avant, il quittait en urgence et pouvait perdre les derniers cookies Google, ce qui faisait tomber la connexion.
+- La lecture utilise le même Chrome, normal (plus de mode « headless »), avec sa fenêtre hors de l'écran : Google voit toujours le même navigateur.
+- « Se connecter » vérifie d'abord si tu es déjà connectée : dans ce cas, aucune fenêtre ne s'ouvre.
+- Si Google refuse une ancienne session, QuestFlow repart d'une connexion propre.
+- En cas d'échec, la fenêtre affiche un détail technique (page atteinte, nombre de cookies, jamais leur contenu).
+- QuestFlow garde le premier plan quand Chrome démarre en arrière-plan, et laisse Chrome se fermer proprement quand tu quittes.
+
 ## 1.1.0
 - Connexion Google sans aucune clé : QuestFlow ouvre Google Chrome une seule fois pour que tu te connectes, détecte la connexion et referme la fenêtre. Ensuite, Gmail, Agenda et Chat sont lus en arrière-plan, sans fenêtre.
 - Plus de projet Google Cloud ni d'identifiants à copier.

@@ -88,6 +88,8 @@ export function createMockApi() {
     async googleConnect() {
       const phase = (p) => subs.login.forEach((f) => f(p));
       if (!state.google.chrome) { phase({ phase: 'no-chrome' }); return { connected: false, code: 'NO_CHROME', error: "Google Chrome n'est pas installé" }; }
+      if (params.get('login') === 'already') { phase({ phase: 'checking' }); await wait(1800); state.google.connected = true; emit(); return { connected: true, email: 'stella@exemple.fr' }; }
+      if (params.get('login') === 'fail') { phase({ phase: 'waiting' }); await wait(1500); phase({ phase: 'verifying' }); await wait(1000); phase({ phase: 'error', error: "Chrome n'a pas gardé ta connexion Google. Reconnecte-toi : cette fois QuestFlow attend que tout soit bien enregistré.", detail: 'page : accounts.google.com/v3/signin/identifier · cookies Google : 4' }); return { connected: false, code: 'NOT_LOGGED_IN' }; }
       await wait(600);
       phase({ phase: 'waiting' });
       // ?login=hold : la fenêtre reste en attente (captures d'écran)

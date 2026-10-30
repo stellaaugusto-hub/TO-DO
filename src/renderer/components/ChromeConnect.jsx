@@ -9,7 +9,7 @@ const STEPS = [
   { key: 'check', title: 'QuestFlow vérifie et referme Chrome', sub: 'Ensuite, tout se fait en arrière-plan, sans fenêtre.' },
 ];
 
-const ORDER = { opening: 0, waiting: 1, detected: 2, verifying: 2, done: 3 };
+const ORDER = { checking: 0, opening: 0, waiting: 1, detected: 2, verifying: 2, done: 3 };
 
 function StepIcon({ state }) {
   if (state === 'done') return <motion.span className="cc-step-ic done" initial={{ scale: 0.6 }} animate={{ scale: 1 }}><Check size={13} strokeWidth={3} /></motion.span>;
@@ -28,11 +28,12 @@ export function ChromeConnect() {
     setGoogleLogin(null);
   };
   const status = {
+    checking: 'Je regarde si tu es déjà connectée…',
     opening: 'Ouverture de Google Chrome…',
     waiting: 'En attente de ta connexion…',
-    detected: 'Connexion détectée, fermeture de Chrome…',
+    detected: 'Connexion détectée, Chrome enregistre ta session et se ferme…',
     verifying: 'Vérification de ton agenda et de ta boîte mail…',
-    done: `Connecté${googleLogin?.email ? ` : ${googleLogin.email}` : ''}`,
+    done: `${googleLogin?.already ? 'Déjà connecté' : 'Connecté'}${googleLogin?.email ? ` : ${googleLogin.email}` : ''}`,
   }[phase];
 
   return (
@@ -52,11 +53,13 @@ export function ChromeConnect() {
               <div className={`cc-window ${phase === 'done' ? 'ok' : ''}`}>
                 <div className="cc-bar">
                   <span className="cc-dots"><i /><i /><i /></span>
-                  <span className="cc-url"><Lock size={11} /> {phase === 'done' || phase === 'verifying' ? 'mail.google.com' : 'accounts.google.com'}</span>
+                  <span className="cc-url"><Lock size={11} /> {['done', 'verifying', 'checking'].includes(phase) ? 'mail.google.com' : 'accounts.google.com'}</span>
                 </div>
                 <div className="cc-page">
                   {failed ? (
                     <div className="cc-center"><AlertTriangle size={26} /><div>{phase === 'no-chrome' ? 'Google Chrome est introuvable sur ce Mac' : 'La connexion n’a pas abouti'}</div></div>
+                  ) : phase === 'checking' ? (
+                    <div className="cc-center"><Loader size={24} className="spin-inline" /><div>Je vérifie ta session Google…</div></div>
                   ) : phase === 'done' ? (
                     <motion.div className="cc-center" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
                       <span className="cc-check"><Check size={22} strokeWidth={3} /></span>
@@ -82,8 +85,11 @@ export function ChromeConnect() {
                     {phase === 'no-chrome'
                       ? 'QuestFlow passe par Google Chrome pour lire ton agenda, tes mails et Chat. Installe Chrome (gratuit), puis clique sur Réessayer.'
                       : googleLogin.error || 'Réessaie : connecte-toi dans la fenêtre Chrome, QuestFlow la fermera tout seul.'}
+                    {googleLogin.detail && <div className="cc-detail">Détail technique : {googleLogin.detail}</div>}
                   </div>
                 </div>
+              ) : phase === 'checking' ? (
+                <div className="muted" style={{ fontSize: 13.5, marginTop: 16, lineHeight: 1.55 }}>Si tu es déjà connectée, rien ne s’ouvre : QuestFlow se souvient de ta session. Sinon, une fenêtre Chrome s’ouvre pour te connecter.</div>
               ) : (
                 <div className="cc-steps">
                   {STEPS.map((st, i) => {
@@ -122,7 +128,7 @@ export function ChromeConnect() {
               ) : (
                 <>
                   <button className="btn" onClick={close}>Annuler</button>
-                  <button className="btn primary" disabled={idx !== 1} onClick={() => api.googleFinishLogin()}>J’ai terminé</button>
+                  {phase !== 'checking' && <button className="btn primary" disabled={idx !== 1} onClick={() => api.googleFinishLogin()}>J’ai terminé</button>}
                 </>
               )}
             </div>

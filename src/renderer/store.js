@@ -40,11 +40,11 @@ export const useApp = create((set, get) => ({
     set({ googleLogin: { phase: 'opening' } });
     const r = await api.googleConnect();
     if (r?.connected) {
-      set({ googleLogin: { phase: 'done', email: r.email } });
+      set({ googleLogin: { ...(get().googleLogin || {}), phase: 'done', email: r.email } });
       get().toast(`Google connecté${r.email ? ` (${r.email})` : ''}`, { icon: 'check' });
       setTimeout(() => { if (get().googleLogin?.phase === 'done') set({ googleLogin: null }); }, 1600);
     } else if (r?.code === 'CANCELLED') set({ googleLogin: null });
-    else set({ googleLogin: { phase: r?.code === 'NO_CHROME' ? 'no-chrome' : 'error', error: r?.error } });
+    else if (!['error', 'no-chrome'].includes(get().googleLogin?.phase)) set({ googleLogin: { phase: r?.code === 'NO_CHROME' ? 'no-chrome' : 'error', error: r?.error } });
     return r;
   },
 

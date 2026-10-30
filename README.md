@@ -16,19 +16,21 @@ Ensuite, plus rien à faire : à chaque lancement, QuestFlow vérifie s'il exist
 
 Aucune clé API, aucun projet Google Cloud. QuestFlow passe par **Google Chrome** :
 
-1. Au premier lancement (ou Réglages → Google → **Se connecter avec Chrome**), une fenêtre Chrome s'ouvre sur la page de connexion Google. Tu te connectes toi-même, comme d'habitude (mot de passe, validation sur le téléphone…).
-2. QuestFlow détecte la connexion et referme la fenêtre tout seul (ou clique sur « J'ai terminé »).
-3. Ensuite, à chaque scan, QuestFlow relance ce Chrome **sans fenêtre** (mode headless), lit Gmail, Google Agenda et Google Chat comme tu le ferais, puis le referme.
+1. Au premier lancement (ou Réglages → Google → **Se connecter avec Chrome**), QuestFlow regarde d'abord si tu es déjà connectée : si oui, rien ne s'ouvre.
+2. Sinon, une fenêtre Chrome s'ouvre sur la page de connexion Google. Tu te connectes toi-même, comme d'habitude (mot de passe, validation sur le téléphone…).
+3. QuestFlow détecte la connexion et referme Chrome **proprement** (comme ⌘Q), pour que Chrome enregistre bien ta session (ou clique sur « J'ai terminé »).
+4. Ensuite, à chaque scan, QuestFlow relance ce même Chrome, sans fenêtre à l'écran, lit Gmail, Google Agenda et Google Chat comme tu le ferais, puis le referme proprement. La session reste enregistrée : pas besoin de retaper ton mot de passe.
 
 Détails :
 
 - **Profil Chrome à part**, rangé dans `~/Library/Application Support/QuestFlow/chrome-profile` : ton Chrome habituel, tes favoris et tes mots de passe ne sont pas touchés. « Déconnecter » efface ce profil.
 - La fenêtre de connexion est un Chrome normal, sans aucun pilotage : QuestFlow ne voit ni ne tape ton mot de passe.
+- Pour lire, QuestFlow utilise ce même Chrome, normal (pas de mode « headless »), avec sa fenêtre placée hors de l'écran : Google voit toujours le même navigateur. Une icône Chrome peut apparaître quelques secondes dans le Dock pendant la lecture.
+- Les cookies de ce profil sont chiffrés par Chrome comme d'habitude (trousseau macOS).
 - **Gmail** : boîte de réception (onglet Principal), lecture du message d'origine (« Afficher l'original »), sans marquer les mails comme lus.
 - **Google Agenda** : lecture via l'export officiel (Paramètres → Exporter) avec les récurrences ; création, renommage et suppression par les mêmes clics que toi. Si Google change son interface, Google Agenda s'ouvre sur la bonne page dans une fenêtre Chrome et se referme dès que tu as enregistré.
 - **Google Chat (bêta)** : messages directs et mentions des derniers jours. Les conversations ouvertes par QuestFlow passent en « lu ».
-- Les cookies de ce profil sont chiffrés avec une clé interne à Chrome (option `--use-mock-keychain`), sans accès au trousseau macOS : pas de demande de mot de passe à chaque scan.
-- Google peut parfois demander de se reconnecter : QuestFlow rouvre alors simplement la fenêtre de connexion.
+- Si la connexion échoue, la fenêtre affiche un « Détail technique » (page atteinte, nombre de cookies Google, jamais leur contenu) : une capture d'écran suffit pour comprendre.
 - Si l'interface de Google change, QuestFlow écrit un fichier `diagnostic-*.txt` dans ses journaux (Réglages → Mises à jour → Journal de diagnostic). Il ne contient que la structure de la page, jamais le contenu de tes mails.
 
 ## Fonctionnalités

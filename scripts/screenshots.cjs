@@ -32,6 +32,8 @@ const shots = {
   async '22-connexion-reussie'(page) { await page.goto(BASE + '?phase=main&fresh=1&tab=settings'); await page.waitForTimeout(800); await page.click('.settings-nav >> text=Google'); await page.waitForTimeout(300); await page.click('text=Se connecter avec Chrome'); await page.waitForTimeout(5600); },
   async '23-reglages-google'(page) { await page.goto(BASE + '?phase=main&tab=settings'); await page.waitForTimeout(800); await page.click('.settings-nav >> text=Google'); await page.waitForTimeout(300); await page.click('button:has-text("Tester")'); await page.waitForTimeout(1900); },
   async '24-chrome-absent'(page) { await page.goto(BASE + '?phase=main&fresh=1&nochrome=1'); await page.waitForTimeout(900); await page.click('text=Connecter Google'); await page.waitForTimeout(700); },
+  async '25-deja-connectee'(page) { await page.goto(BASE + '?phase=main&fresh=1&login=already'); await page.waitForTimeout(900); await page.click('text=Connecter Google'); await page.waitForTimeout(900); },
+  async '26-echec-detail'(page) { await page.goto(BASE + '?phase=main&fresh=1&login=fail'); await page.waitForTimeout(900); await page.click('text=Connecter Google'); await page.waitForTimeout(3600); },
 };
 
 (async () => {
