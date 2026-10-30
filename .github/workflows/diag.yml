@@ -1,0 +1,32 @@
+name: Diagnostic Chrome sur Mac
+on:
+  push:
+    branches: [diag/mac-chrome]
+jobs:
+  mac:
+    runs-on: macos-15-intel
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Chrome
+        run: ls "/Applications/Google Chrome.app/Contents/MacOS/" && "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --version
+      - name: Certificat de test
+        run: openssl req -x509 -newkey rsa:2048 -nodes -keyout key.pem -out cert.pem -days 2 -subj "/CN=google.com" -addext "subjectAltName=DNS:*.google.com,DNS:google.com"
+      - name: Expérience
+        run: |
+          echo 0 > late.txt
+          node server.mjs & sleep 2
+          node experiment.mjs
+          echo 0 > late.txt
+          SIGNALS=SIGTERM,SIGINT,SIGHUP,APPLEQUIT,SIGTERM_WAIT35 node signals.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: diag
+          path: |
+            shots/
+            results.json
+            signals.json
+            requests.jsonl

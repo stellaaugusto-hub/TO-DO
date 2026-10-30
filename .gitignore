@@ -1,0 +1,8 @@
+*.pem
+prof-*/
+shots/
+*.log
+requests.jsonl
+late.txt
+results.json
+signals.json
