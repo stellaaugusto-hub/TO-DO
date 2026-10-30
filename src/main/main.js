@@ -20,6 +20,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, '../../package.json'), 'utf8'));
 
 app.setName('QuestFlow');
+// Pas d'accès au trousseau macOS (évite une demande de mot de passe après chaque mise à jour).
+app.commandLine.appendSwitch('use-mock-keychain');
 if (process.env.QF_USER_DATA) app.setPath('userData', process.env.QF_USER_DATA);
 
 if (!app.requestSingleInstanceLock()) {

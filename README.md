@@ -22,7 +22,7 @@ QuestFlow utilise la connexion officielle de Google (OAuth). Dans l'app : **Rég
 4. Clients → Créer un client → **Application de bureau** → copier l'ID client et le code secret dans QuestFlow.
 5. (Chat) Onglet Configuration de l'API Chat : nom, avatar, description.
 
-Ton navigateur s'ouvre, tu autorises, c'est fini. Le jeton est chiffré dans le trousseau macOS.
+Ton navigateur s'ouvre, tu autorises, c'est fini. Le jeton d'accès reste sur ton Mac (fichier lisible uniquement par ton compte), rien ne passe par un serveur tiers.
 
 ## Fonctionnalités
 

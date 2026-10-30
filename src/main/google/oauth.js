@@ -1,13 +1,15 @@
 // Connexion Google officielle (OAuth 2.0 pour applications de bureau).
 // L'autorisation s'ouvre dans le navigateur de l'utilisateur (Chrome, Safari…),
 // Google renvoie un code sur un petit serveur local 127.0.0.1, l'app l'échange
-// contre des jetons. Le jeton de rafraîchissement est chiffré via le trousseau macOS.
+// contre des jetons. Le jeton de rafraîchissement reste sur le Mac, dans un fichier
+// lisible uniquement par l'utilisateur (pas le trousseau : avec une signature ad-hoc,
+// macOS redemanderait le mot de passe du trousseau après chaque mise à jour).
 
 import http from 'node:http';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { app, shell, safeStorage, net } from 'electron';
+import { app, shell, net } from 'electron';
 
 export const SCOPES = [
   'openid',
@@ -83,8 +85,7 @@ export class GoogleAuth {
 
   _load() {
     try {
-      const buf = fs.readFileSync(this.file);
-      return safeStorage.isEncryptionAvailable() ? safeStorage.decryptString(buf) : buf.toString('utf8');
+      return fs.readFileSync(this.file, 'utf8').trim() || null;
     } catch {
       return null;
     }
@@ -96,8 +97,8 @@ export class GoogleAuth {
       try { fs.unlinkSync(this.file); } catch {}
       return;
     }
-    const data = safeStorage.isEncryptionAvailable() ? safeStorage.encryptString(token) : Buffer.from(token, 'utf8');
-    fs.writeFileSync(this.file, data, { mode: 0o600 });
+    fs.writeFileSync(this.file, token, { mode: 0o600 });
+    fs.chmodSync(this.file, 0o600);
   }
 
   async _token(params) {
