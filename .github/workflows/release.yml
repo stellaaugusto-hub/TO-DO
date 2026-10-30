@@ -1,0 +1,79 @@
+name: Publier une version macOS
+
+# Se lance quand on pousse un tag vX.Y.Z : construit l'app sur un Mac GitHub,
+# crée la Release avec le Setup (.pkg), le .dmg et les .zip de mise à jour automatique.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+
+      - name: Vérifier que le tag correspond à package.json
+        if: github.event_name == 'push'
+        run: |
+          V=$(node -p "require('./package.json').version")
+          if [ "$GITHUB_REF_NAME" != "v$V" ]; then echo "Le tag $GITHUB_REF_NAME ne correspond pas à la version v$V"; exit 1; fi
+
+      - name: Construire l'app (Setup .pkg, .dmg, .zip)
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          # Sans certificat Apple : signature ad-hoc (voir electron-builder.config.cjs)
+          if [ -z "$CSC_LINK" ]; then unset CSC_LINK CSC_KEY_PASSWORD; export CSC_IDENTITY_AUTO_DISCOVERY=false; fi
+          if [ -z "$APPLE_ID" ]; then unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; fi
+          npm run dist:mac
+
+      - name: Vérifier la signature
+        run: |
+          for app in release/mac-universal/QuestFlow.app release/mac-arm64/QuestFlow.app release/mac/QuestFlow.app; do
+            [ -d "$app" ] && codesign --verify --deep --strict --verbose=2 "$app"
+          done
+          ls -la release
+
+      - name: Empreintes SHA-256 des mises à jour
+        run: |
+          cd release
+          for f in QuestFlow-*-mac-*.zip; do shasum -a 256 "$f" | cut -d' ' -f1 > "$f.sha256"; done
+
+      - name: Publier la Release GitHub
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          REPO="${{ github.repository }}"
+          {
+            echo "## ⚔️ QuestFlow $V"
+            echo
+            echo "**👉 [Télécharger l'installateur (QuestFlow-Setup.pkg)](https://github.com/$REPO/releases/download/v$V/QuestFlow-Setup.pkg)**"
+            echo
+            echo "Tu as déjà QuestFlow ? Rien à faire : la mise à jour s'installe toute seule au prochain lancement."
+            echo
+            node -e "const s=require('fs').readFileSync('CHANGELOG.md','utf8');const m=s.split(/^## /m).find(x=>x.startsWith('$V'));if(m)console.log('### Nouveautés\n'+m.split('\n').slice(1).join('\n').trim())" || true
+          } > notes.md
+          FILES="release/QuestFlow-Setup.pkg release/QuestFlow.dmg $(ls release/QuestFlow-*-mac-*.zip release/QuestFlow-*-mac-*.zip.sha256)"
+          if gh release view "v$V" --repo "$REPO" >/dev/null 2>&1; then
+            gh release upload "v$V" $FILES --clobber --repo "$REPO"
+          else
+            gh release create "v$V" $FILES --title "QuestFlow $V" --notes-file notes.md --repo "$REPO"
+          fi

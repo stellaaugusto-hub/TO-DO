@@ -1,0 +1,12 @@
+#!/bin/bash
+# Après l'installation : l'app appartient à l'utilisateur (pour que les mises à jour
+# automatiques puissent la remplacer sans mot de passe), puis on la lance.
+APP="/Applications/QuestFlow.app"
+CONSOLE_USER=$(/usr/bin/stat -f%Su /dev/console)
+if [ -d "$APP" ] && [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
+  /usr/sbin/chown -R "$CONSOLE_USER":staff "$APP"
+  /usr/bin/xattr -dr com.apple.quarantine "$APP" 2>/dev/null
+  USER_ID=$(/usr/bin/id -u "$CONSOLE_USER")
+  /bin/launchctl asuser "$USER_ID" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/open "$APP" >/dev/null 2>&1 &
+fi
+exit 0
