@@ -62,4 +62,4 @@ npm start           # app Electron
 npm run dist:mac    # build macOS (sur un Mac)
 ```
 
-Publier une version : changer `version` dans `package.json`, ajouter une section au `CHANGELOG.md`, puis pousser un tag `vX.Y.Z`. GitHub Actions construit le Setup et publie la Release ; les apps installées se mettent à jour toutes seules.
+Publier une version : changer `version` dans `package.json`, ajouter une section au `CHANGELOG.md`, puis pousser sur `main`. GitHub Actions construit le Setup sur un Mac et publie la Release (aussi possible : un tag `vX.Y.Z`, ou le bouton « Run workflow » de l'onglet Actions). Les apps installées se mettent à jour toutes seules.

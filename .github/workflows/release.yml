@@ -1,9 +1,12 @@
 name: Publier une version macOS
 
-# Se lance quand on pousse un tag vX.Y.Z : construit l'app sur un Mac GitHub,
-# crée la Release avec le Setup (.pkg), le .dmg et les .zip de mise à jour automatique.
+# Se lance quand la version de package.json change sur main (ou un tag vX.Y.Z, ou à la main) :
+# construit l'app sur un Mac GitHub et crée la Release avec le Setup (.pkg), le .dmg
+# et les .zip de mise à jour automatique. Une version déjà publiée n'est pas reconstruite.
 on:
   push:
+    branches: [main]
+    paths: ['package.json']
     tags: ['v*']
   workflow_dispatch:
 
@@ -17,21 +20,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Version déjà publiée ?
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node -p "require('./package.json').version")
+          if gh release view "v$V" --repo "${{ github.repository }}" >/dev/null 2>&1 && [ "${{ github.event_name }}" = "push" ]; then
+            echo "La version v$V est déjà publiée, rien à faire."; echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-node@v4
+        if: steps.check.outputs.skip != 'true'
         with:
           node-version: 22
           cache: npm
 
-      - run: npm ci
-      - run: npm test
+      - if: steps.check.outputs.skip != 'true'
+        run: npm ci
+      - if: steps.check.outputs.skip != 'true'
+        run: npm test
 
       - name: Vérifier que le tag correspond à package.json
-        if: github.event_name == 'push'
+        if: steps.check.outputs.skip != 'true' && startsWith(github.ref, 'refs/tags/')
         run: |
           V=$(node -p "require('./package.json').version")
           if [ "$GITHUB_REF_NAME" != "v$V" ]; then echo "Le tag $GITHUB_REF_NAME ne correspond pas à la version v$V"; exit 1; fi
 
       - name: Construire l'app (Setup .pkg, .dmg, .zip)
+        if: steps.check.outputs.skip != 'true'
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -45,6 +64,7 @@ jobs:
           npm run dist:mac
 
       - name: Vérifier la signature
+        if: steps.check.outputs.skip != 'true'
         run: |
           for app in release/mac-universal/QuestFlow.app release/mac-arm64/QuestFlow.app release/mac/QuestFlow.app; do
             [ -d "$app" ] && codesign --verify --deep --strict --verbose=2 "$app"
@@ -52,11 +72,13 @@ jobs:
           ls -la release
 
       - name: Empreintes SHA-256 des mises à jour
+        if: steps.check.outputs.skip != 'true'
         run: |
           cd release
           for f in QuestFlow-*-mac-*.zip; do shasum -a 256 "$f" | cut -d' ' -f1 > "$f.sha256"; done
 
       - name: Publier la Release GitHub
+        if: steps.check.outputs.skip != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
