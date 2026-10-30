@@ -1,7 +1,7 @@
 {
   "name": "questflow",
   "productName": "QuestFlow",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Ta to-do gamifiée connectée à Google Agenda, Gmail et Chat.",
   "author": "Stella Augusto",
   "license": "UNLICENSED",
@@ -37,9 +37,7 @@
   },
   "questflow": {
     "githubOwner": "stellaaugusto-hub",
-    "githubRepo": "TO-DO",
-    "googleClientId": "",
-    "googleClientSecret": ""
+    "githubRepo": "TO-DO"
   },
   "repository": {
     "type": "git",

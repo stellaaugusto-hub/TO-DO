@@ -12,17 +12,24 @@ Ensuite, plus rien à faire : à chaque lancement, QuestFlow vérifie s'il exist
 
 > L'avertissement de l'étape 2 disparaît si l'app est signée avec un certificat Apple Developer (99 €/an) : ajoute les secrets `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID` au dépôt GitHub et la signature + notarisation se font automatiquement.
 
-## Connecter Google (une seule fois)
+## Connecter Google (une seule fois, sans clé)
 
-QuestFlow utilise la connexion officielle de Google (OAuth). Dans l'app : **Réglages → Compte Google → Ouvrir le guide**. Il faut créer un petit projet Google Cloud (≈ 10 min, uniquement des clics) :
+Aucune clé API, aucun projet Google Cloud. QuestFlow passe par **Google Chrome** :
 
-1. Créer un projet « QuestFlow » sur console.cloud.google.com.
-2. Activer Google Calendar API, Gmail API et (facultatif) Google Chat API.
-3. Google Auth Platform → Commencer → Audience **Interne**.
-4. Clients → Créer un client → **Application de bureau** → copier l'ID client et le code secret dans QuestFlow.
-5. (Chat) Onglet Configuration de l'API Chat : nom, avatar, description.
+1. Au premier lancement (ou Réglages → Google → **Se connecter avec Chrome**), une fenêtre Chrome s'ouvre sur la page de connexion Google. Tu te connectes toi-même, comme d'habitude (mot de passe, validation sur le téléphone…).
+2. QuestFlow détecte la connexion et referme la fenêtre tout seul (ou clique sur « J'ai terminé »).
+3. Ensuite, à chaque scan, QuestFlow relance ce Chrome **sans fenêtre** (mode headless), lit Gmail, Google Agenda et Google Chat comme tu le ferais, puis le referme.
 
-Ton navigateur s'ouvre, tu autorises, c'est fini. Le jeton d'accès reste sur ton Mac (fichier lisible uniquement par ton compte), rien ne passe par un serveur tiers.
+Détails :
+
+- **Profil Chrome à part**, rangé dans `~/Library/Application Support/QuestFlow/chrome-profile` : ton Chrome habituel, tes favoris et tes mots de passe ne sont pas touchés. « Déconnecter » efface ce profil.
+- La fenêtre de connexion est un Chrome normal, sans aucun pilotage : QuestFlow ne voit ni ne tape ton mot de passe.
+- **Gmail** : boîte de réception (onglet Principal), lecture du message d'origine (« Afficher l'original »), sans marquer les mails comme lus.
+- **Google Agenda** : lecture via l'export officiel (Paramètres → Exporter) avec les récurrences ; création, renommage et suppression par les mêmes clics que toi. Si Google change son interface, Google Agenda s'ouvre sur la bonne page dans une fenêtre Chrome et se referme dès que tu as enregistré.
+- **Google Chat (bêta)** : messages directs et mentions des derniers jours. Les conversations ouvertes par QuestFlow passent en « lu ».
+- Les cookies de ce profil sont chiffrés avec une clé interne à Chrome (option `--use-mock-keychain`), sans accès au trousseau macOS : pas de demande de mot de passe à chaque scan.
+- Google peut parfois demander de se reconnecter : QuestFlow rouvre alors simplement la fenêtre de connexion.
+- Si l'interface de Google change, QuestFlow écrit un fichier `diagnostic-*.txt` dans ses journaux (Réglages → Mises à jour → Journal de diagnostic). Il ne contient que la structure de la page, jamais le contenu de tes mails.
 
 ## Fonctionnalités
 
@@ -36,7 +43,7 @@ Ton navigateur s'ouvre, tu autorises, c'est fini. Le jeton d'accès reste sur to
 - **Croix ✕** pour supprimer, avec confirmation.
 - **Recherche** : texte libre + `#tag`, `prio:haute`, `date:demain`, `date:retard`, `source:mail`, `diff:epique`, `de:jean`, `statut:tout`.
 - **Notifications** : quête prioritaire bientôt due, échéance atteinte, réunion dans 10 min, récap du matin.
-- **Quest Runner** : mini-jeu de course (original) avec record, pendant les scans ; retour direct à l'onglet dès que c'est fini.
+- **Coche !** : mini-jeu de course pendant les scans, dessiné comme une page Notion (une case à cocher saute les mails et les réunions, attrape les coches), avec record ; retour direct à l'onglet dès que c'est fini.
 - **Coller un texte** (Slack, WhatsApp, notes…) pour en extraire des quêtes.
 
 ## L'algorithme de détection des missions

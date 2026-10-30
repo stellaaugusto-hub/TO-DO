@@ -37,7 +37,7 @@ function demoState(params) {
     tasks,
     events,
     stats: { xp: fresh ? 0 : 465, streak: fresh ? 0 : 6, bestStreak: 9, lastCompletionDay: fresh ? null : dayKey(new Date()), completedCount: 31, highScore: fresh ? 0 : 1840, gamesPlayed: 12 },
-    google: { connected: !fresh, configured: !fresh, clientId: fresh ? '' : '123456789-demo.apps.googleusercontent.com', email: 'stella@exemple.fr', lastSync: h(0, 9, 5) },
+    google: { connected: !fresh, chrome: params.get('nochrome') !== '1', method: 'chrome', email: 'stella@exemple.fr', lastSync: h(0, 9, 5) },
     app: { version: '1.0.0', platform: 'darwin', packaged: false },
   };
 }
@@ -52,7 +52,8 @@ const SAMPLE_MAILS = [
 export function createMockApi() {
   const params = new URLSearchParams(location.search);
   let state = demoState(params);
-  const subs = { state: new Set(), progress: new Set(), updater: new Set(), nav: new Set(), open: new Set(), bg: new Set() };
+  const subs = { state: new Set(), progress: new Set(), updater: new Set(), nav: new Set(), open: new Set(), bg: new Set(), login: new Set(), assist: new Set() };
+  let loginEnd = null;
   const emit = () => { const s = structuredClone(state); subs.state.forEach((f) => f(s)); };
   const sub = (k) => (cb) => { subs[k].add(cb); return () => subs[k].delete(cb); };
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -84,11 +85,32 @@ export function createMockApi() {
     async markSeen() { state.tasks.forEach((t) => { t.isNew = false; }); emit(); },
     async tasksFromText(text) { return extractTasksFromText(text, { userName: state.profile.name }).tasks; },
     async saveScore(score) { state.stats.highScore = Math.max(state.stats.highScore, score); emit(); return state.stats.highScore; },
-    async googleConnect() { await wait(800); state.google.connected = true; emit(); return { connected: true }; },
+    async googleConnect() {
+      const phase = (p) => subs.login.forEach((f) => f(p));
+      if (!state.google.chrome) { phase({ phase: 'no-chrome' }); return { connected: false, code: 'NO_CHROME', error: "Google Chrome n'est pas installé" }; }
+      await wait(600);
+      phase({ phase: 'waiting' });
+      // ?login=hold : la fenêtre reste en attente (captures d'écran)
+      const r = await new Promise((res) => { loginEnd = res; if (params.get('login') !== 'hold') setTimeout(() => res('detected'), 2600); });
+      if (r === 'cancel') return { connected: false, code: 'CANCELLED' };
+      phase({ phase: 'detected' });
+      await wait(900);
+      phase({ phase: 'verifying' });
+      await wait(1100);
+      state.google.connected = true;
+      state.google.email = 'stella@exemple.fr';
+      emit();
+      return { connected: true, email: 'stella@exemple.fr' };
+    },
+    async googleFinishLogin() { loginEnd?.('done'); },
+    async googleCancelLogin() { loginEnd?.('cancel'); },
+    async googleTest() { await wait(1500); return { ok: true, mails: 42, events: state.events.length, chats: 6, errors: {} }; },
+    onGoogleLogin: sub('login'),
+    onCalendarAssist: sub('assist'),
     async googleDisconnect() { state.google.connected = false; emit(); },
     async googleStatus() { return state.google.connected; },
     async sync() {
-      const steps = [['connect', 'Connexion à Google…'], ['calendar', 'Lecture de ton agenda…'], ['mail', 'Lecture de tes mails…'], ['chat', 'Lecture de tes conversations Chat…'], ['analyse', 'Analyse et tri de tes missions…']];
+      const steps = [['connect', 'Ouverture de Chrome en arrière-plan…'], ['mail', 'Lecture de tes mails…'], ['calendar', 'Lecture de ton agenda…'], ['chat', 'Lecture de tes conversations Chat…'], ['analyse', 'Analyse et tri de tes missions…']];
       for (const [key, label] of steps) {
         subs.progress.forEach((f) => f({ key, label }));
         await wait(syncDuration / steps.length);
@@ -102,7 +124,6 @@ export function createMockApi() {
     },
     onSyncProgress: sub('progress'),
     onBackgroundSync: sub('bg'),
-    async googleConfigure() { state.google.configured = true; emit(); return true; },
     async calendarRefresh() { return { ok: true }; },
     async calendarList() { return { ok: true, events: [] }; },
     async calendarCreate(ev) { const e = { ...ev, id: 'e' + Date.now(), eventId: 'x' + Date.now(), calendarId: 'primary', calendar: 'Travail', editable: true }; state.events.push(e); emit(); return { ok: true, result: e }; },

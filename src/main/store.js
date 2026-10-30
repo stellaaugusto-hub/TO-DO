@@ -22,7 +22,6 @@ export const DEFAULT_STATE = {
   tasks: [],
   events: [],
   stats: { xp: 0, streak: 0, bestStreak: 0, lastCompletionDay: null, completedCount: 0, highScore: 0, gamesPlayed: 0 },
-  googleClient: { clientId: '', clientSecret: '' },
   google: { connected: false, email: null, profile: null, lastSync: null, lastMailSync: null, lastCalendarSync: null, lastChatSync: null, lastError: null },
   processed: { mail: [], chat: [] },
   notified: {},

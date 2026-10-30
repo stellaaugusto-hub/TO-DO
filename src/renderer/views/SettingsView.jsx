@@ -7,7 +7,7 @@ import { usePrefs, savePrefs } from '../lib/prefs.js';
 import { ACCENTS, NOTION_COLORS, COLOR_LABEL, coverCss } from '../lib/notion.js';
 import { relative } from '../lib/format.js';
 import { setSoundEnabled } from '../lib/sound.js';
-import { Toggle, Tag, MenuButton, Popover } from '../components/ui.jsx';
+import { Toggle, Tag, MenuButton, Popover, ConfirmButton } from '../components/ui.jsx';
 import { IconPicker, CoverPicker, ColorList } from '../components/Pickers.jsx';
 
 function Row({ title, sub, children }) {
@@ -66,7 +66,7 @@ function PageRow({ id, p, index, total, order }) {
 }
 
 export function SettingsView() {
-  const { data, updater, toast, runSync, connectGoogle, setGoogleSetupOpen } = useApp();
+  const { data, updater, toast, runSync, connectGoogle } = useApp();
   const prefs = usePrefs();
   const a = prefs.appearance;
   const s = data.settings;
@@ -74,6 +74,8 @@ export function SettingsView() {
   const [section, setSection] = useState('account');
   const [name, setName] = useState(data.profile.name);
   const [connecting, setConnecting] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [test, setTest] = useState(null);
   useEffect(() => setName(data.profile.name), [data.profile.name]);
   const set = (patch) => api.setSettings(patch);
   const ap = (patch) => savePrefs({ appearance: patch });
@@ -179,19 +181,33 @@ export function SettingsView() {
             <h1>Google</h1>
             <div className="set-group">
               <h3>Compte</h3>
-              <Row title={g.connected ? 'Connecté' : g.configured ? 'Non connecté' : 'À configurer (une seule fois)'} sub={g.connected ? `${g.email || 'Compte Google'} · dernier scan ${relative(g.lastSync)}` : 'Agenda, Gmail et Chat via la connexion officielle de Google'}>
+              <Row title={g.connected ? 'Connecté' : 'Non connecté'} sub={g.connected ? `${g.email || 'Compte Google'} · dernier scan ${relative(g.lastSync)}` : 'Agenda, Gmail et Chat, via Google Chrome : tu te connectes une fois, sans clé ni réglage'}>
                 <span className={`status-dot ${g.connected ? 'ok' : 'warn'}`} />
                 {g.connected ? (
-                  <button className="btn sm outline" onClick={() => api.googleDisconnect()}><LogOut size={14} /> Déconnecter</button>
+                  <ConfirmButton button={<button className="btn sm outline"><LogOut size={14} /> Déconnecter</button>} message="Se déconnecter de Google dans QuestFlow ? Ton Chrome habituel n'est pas touché." confirmLabel="Déconnecter" onConfirm={() => api.googleDisconnect()} />
                 ) : (
-                  <button className="btn sm primary" disabled={connecting} onClick={async () => { setConnecting(true); await connectGoogle(); setConnecting(false); }}>{connecting ? 'Ouvre ton navigateur…' : g.configured ? 'Se connecter' : 'Configurer'}</button>
+                  <button className="btn sm primary" disabled={connecting} onClick={async () => { setConnecting(true); await connectGoogle(); setConnecting(false); }}>{connecting ? 'Connexion dans Chrome…' : 'Se connecter avec Chrome'}</button>
                 )}
               </Row>
-              {g.lastError && <div className="callout" style={{ margin: '4px 0' }}><span className="emoji">⚠️</span><div style={{ fontSize: 13.5 }}>Dernière erreur : {typeof g.lastError === 'string' ? g.lastError : Object.entries(g.lastError).map(([k, v]) => `${k} : ${v}`).join(' · ')}</div></div>}
-              <Row title="Identifiants Google Cloud" sub={g.configured ? `ID client : ${g.clientId.slice(0, 24)}…` : 'Guide pas à pas (≈ 10 min)'}>
-                <button className="btn sm outline" onClick={() => setGoogleSetupOpen(true)}>{g.configured ? 'Modifier' : 'Ouvrir le guide'}</button>
+              {g.lastError && <div className="callout" style={{ margin: '4px 0' }}><span className="emoji">⚠️</span><div style={{ fontSize: 13.5 }}>Dernière erreur : {typeof g.lastError === 'string' ? g.lastError : Object.entries(g.lastError).map(([k, v]) => `${{ mail: 'Gmail', calendar: 'Agenda', chat: 'Chat' }[k] || k} : ${v}`).join(' · ')}</div></div>}
+              <Row title="Google Chrome" sub={g.chrome ? 'Installé. QuestFlow l’ouvre en arrière-plan, sans fenêtre, le temps de lire, puis le referme.' : 'Introuvable : installe Google Chrome pour relier ton compte'}>
+                {g.chrome ? <span className="tag" style={{ background: 'var(--c-green-bg)', color: 'var(--c-green-tx)' }}>Prêt</span> : <button className="btn sm outline" onClick={() => api.openExternal('https://www.google.com/chrome/')}>Télécharger</button>}
               </Row>
-              <Row title="Lire Google Chat" sub="Messages directs et mentions"><Toggle on={s.syncChat} onChange={(v) => set({ syncChat: v })} /></Row>
+              {g.connected && (
+                <Row title="Tester la lecture" sub={test ? (test.ok ? [`Gmail : ${test.mails ?? '—'} fil(s) visibles`, `Agenda : ${test.events ?? '—'} événement(s)`, s.syncChat ? `Chat : ${test.chats ?? '—'} conversation(s)` : null, ...Object.entries(test.errors || {}).map(([k, v]) => `⚠️ ${k} : ${v}`)].filter(Boolean).join(' · ') : `⚠️ ${test.error}`) : 'Vérifie que Gmail, Agenda et Chat se lisent bien (≈ 20 s)'}>
+                  <button className="btn sm outline" disabled={testing} onClick={async () => { setTesting(true); setTest(null); setTest(await api.googleTest()); setTesting(false); }}>{testing ? 'Test en cours…' : 'Tester'}</button>
+                </Row>
+              )}
+            </div>
+            <div className="set-group">
+              <h3>Sources</h3>
+              <Row title="Gmail" sub="Boîte de réception (onglet Principal), sans marquer les mails comme lus"><span className="tag">Toujours</span></Row>
+              <Row title="Google Agenda" sub="Tous tes agendas, avec création, modification et suppression d'événements"><span className="tag">Toujours</span></Row>
+              <Row title="Google Chat (bêta)" sub="Messages directs et mentions. Les conversations lues par QuestFlow passent en « lu »."><Toggle on={s.syncChat} onChange={(v) => set({ syncChat: v })} /></Row>
+            </div>
+            <div className="callout" style={{ fontSize: 13 }}>
+              <span className="emoji">🔒</span>
+              <div style={{ lineHeight: 1.55 }}>QuestFlow utilise un profil Chrome à part, rangé dans ses propres fichiers : ton Chrome habituel, tes favoris et tes mots de passe ne sont pas touchés. Tes mails restent entre ton Mac et Google. Si Google te demande de te reconnecter (ça arrive de temps en temps), QuestFlow rouvre simplement la fenêtre de connexion.</div>
             </div>
           </>
         )}

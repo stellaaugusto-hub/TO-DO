@@ -37,7 +37,7 @@ const IMPORTANT = /\b(important|importante|prioritaire|priorite|en priorite|rapi
 /**
  * @param {string} text
  * @param {Date} now
- * @returns {{ due: Date|null, phrase: string|null, urgency: 'urgent'|'important'|'low'|null, hasTime: boolean }}
+ * @returns {{ due: Date|null, phrase: string|null, timePhrase: string|null, urgency: 'urgent'|'important'|'low'|null, hasTime: boolean }}
  */
 export function parseDue(text, now = new Date()) {
   const f = fold(text).replace(/\s+/g, ' ');
@@ -136,10 +136,13 @@ export function parseDue(text, now = new Date()) {
   // --- heure : « à 15h », « avant 15h30 », « 3pm », « avant midi » ---------------------
   let hm = null;
   let timePhrase = null;
+  let extraPhrase = null;
   if (!relative && ((m = f.match(/\b(?:a|avant|pour|vers|d'ici|des|jusqu'a|at|by|before|until) (\d{1,2}) ?h(\d{2})?\b/)) || (m = f.match(/\b(\d{1,2})h(\d{2})\b/)) || (m = f.match(/\b(\d{1,2}):(\d{2})\b/)))) {
     const h = +m[1];
     if (h <= 23) { hm = [h, m[2] ? +m[2] : 0]; timePhrase = m[0]; }
   }
+  // « demain 17h », « vendredi 9h » : heure seule juste après une date
+  if (!hm && due && !relative && (m = f.match(/\b(\d{1,2}) ?h\b/)) && +m[1] >= 7 && +m[1] <= 23) { hm = [+m[1], 0]; timePhrase = m[0]; }
   if (!hm && !relative && (m = f.match(/\b(?:at |by |before )?(\d{1,2})(?::(\d{2}))? ?(am|pm)\b/))) {
     let h = +m[1] % 12;
     if (m[3] === 'pm') h += 12;
@@ -152,6 +155,7 @@ export function parseDue(text, now = new Date()) {
       due = new Date(due);
       due.setHours(hm[0], hm[1], 0, 0);
       hasTime = true;
+      if (phrase && timePhrase && !phrase.includes(timePhrase.trim())) extraPhrase = timePhrase;
     } else {
       let d = at(now, 0, hm[0], hm[1]);
       if (d < now) d = at(now, 1, hm[0], hm[1]);
@@ -172,7 +176,7 @@ export function parseDue(text, now = new Date()) {
     phrase = null;
   }
 
-  return { due, phrase: phrase ? phrase.trim() : null, urgency, hasTime };
+  return { due, phrase: phrase ? phrase.trim() : null, timePhrase: phrase && extraPhrase ? extraPhrase.trim() : null, urgency, hasTime };
 }
 
 /** Clé jour local AAAA-MM-JJ */

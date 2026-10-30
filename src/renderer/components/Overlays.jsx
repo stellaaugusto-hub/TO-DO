@@ -10,6 +10,7 @@ import { Runner } from '../game/runner.js';
 import { todaysQuests } from '../../shared/priority.js';
 import { levelInfo, currentStreak } from '../../shared/game.js';
 import { XpBar } from './ui.jsx';
+import { AppIcon } from './Logo.jsx';
 
 // Paramètres d'aperçu (captures d'écran) : ?hold=1 fige le Bonjour, ?slow=4 ralentit l'animation de victoire.
 const PREVIEW = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams();
@@ -250,9 +251,9 @@ export function SuccessOverlay() {
 // Chargement (scan mails / chat / agenda) avec le mini-jeu
 // ---------------------------------------------------------------------------
 const STEPS = [
-  { key: 'connect', label: 'Google', icon: CircleCheck },
-  { key: 'calendar', label: 'Agenda', icon: Calendar },
+  { key: 'connect', label: 'Chrome', icon: CircleCheck },
   { key: 'mail', label: 'Mails', icon: Mail },
+  { key: 'calendar', label: 'Agenda', icon: Calendar },
   { key: 'chat', label: 'Chat', icon: MessageCircle },
   { key: 'analyse', label: 'Tri des missions', icon: Wand2 },
 ];
@@ -282,8 +283,8 @@ export function LoadingScreen() {
       {sync && (
         <motion.div className="fullscreen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.25 }}>
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: 40 }}>📨</div>
-            <div style={{ fontSize: 26, fontWeight: 700, marginTop: 6 }}>Je récupère tes missions…</div>
+            <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}><AppIcon size={52} /></motion.div>
+            <div style={{ fontSize: 26, fontWeight: 700, marginTop: 12, letterSpacing: '-0.01em' }}>Je récupère tes missions…</div>
             <div className="muted" style={{ marginTop: 4 }}>{sync.label} En attendant, bats ton record !</div>
             <div className="steps">
               {STEPS.map((s, i) => {
@@ -301,11 +302,13 @@ export function LoadingScreen() {
           <motion.div className="game-frame" initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.08 }}>
             <canvas ref={canvasRef} />
             <div className="game-hud">
-              <span style={{ color: '#fde68a' }}>🏆 RECORD {String(Math.max(hi, score)).padStart(5, '0')}</span>
-              <span style={{ color: '#fff' }}>{String(score).padStart(5, '0')}</span>
+              <span className="game-title">Coche !</span>
+              <span className="grow" />
+              <span className="dim">RECORD {String(Math.max(hi, score)).padStart(5, '0')}</span>
+              <span>{String(score).padStart(5, '0')}</span>
             </div>
           </motion.div>
-          <div className="dim" style={{ fontSize: 12.5, marginTop: 14 }}>Espace ou ↑ pour sauter (deux fois pour un double saut), ↓ pour se baisser. Dès que c'est prêt, je te ramène à tes quêtes.</div>
+          <div className="dim" style={{ fontSize: 12.5, marginTop: 14 }}>Saute les mails, les réunions et les piles de pages, baisse-toi sous les notifications, attrape les coches. Dès que c'est prêt, je te ramène à tes quêtes.</div>
         </motion.div>
       )}
     </AnimatePresence>

@@ -8,7 +8,7 @@ import { Sidebar, TopBar, CommandPalette } from './components/Shell.jsx';
 import { Greeting, SuccessOverlay, LoadingScreen, UpdateOverlay, Toasts } from './components/Overlays.jsx';
 import { Onboarding } from './components/Onboarding.jsx';
 import { TaskPeek } from './components/TaskPeek.jsx';
-import { GoogleSetup } from './components/GoogleSetup.jsx';
+import { ChromeConnect } from './components/ChromeConnect.jsx';
 import { QuestsView, TodoView, DoneView, PasteModal } from './views/Views.jsx';
 import { AgendaView } from './views/AgendaView.jsx';
 import { SettingsView } from './views/SettingsView.jsx';
@@ -38,6 +38,11 @@ export default function App() {
         else if (where !== 'search') setTab(where);
       }),
       api.onOpenTask((id) => openTask(id)),
+      api.onGoogleLogin?.((p) => { if (useApp.getState().googleLogin) useApp.setState({ googleLogin: p }); }),
+      api.onCalendarAssist?.((a) => {
+        useApp.setState({ calendarAssist: a });
+        if (a) useApp.getState().toast(`Google Agenda s'ouvre dans Chrome pour terminer${a.title ? ` « ${a.title} »` : ''} : enregistre, la fenêtre se fermera toute seule.`, { icon: 'sparkles', ms: 9000 });
+      }),
       api.onBackgroundSync((r) => {
         if (r?.ok && r.newTasks.length) {
           useApp.getState().toast(`${r.newTasks.length} nouvelle(s) quête(s) détectée(s)`);
@@ -91,7 +96,7 @@ export default function App() {
       <TaskPeek />
       <CommandPalette />
       <PasteModal />
-      <GoogleSetup />
+      <ChromeConnect />
       <LoadingScreen />
       <SuccessOverlay />
       <UpdateOverlay />

@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { extractTasksFromText } from '../src/shared/extract.js';
 import { sortTasks, bucketOf, todaysQuests, groupTasks } from '../src/shared/priority.js';
 import { parseQuery, searchTasks } from '../src/shared/search.js';
 import { parseDue } from '../src/shared/dates.js';
@@ -101,5 +102,21 @@ describe('gamification', () => {
     expect(st.streak).toBe(2);
     expect(currentStreak(st, NOW)).toBe(2);
     expect(currentStreak(st, new Date(2026, 9, 30))).toBe(0);
+  });
+});
+
+describe('heure dans le titre', () => {
+  const now = new Date(2026, 9, 30, 10);
+  const one = (t) => extractTasksFromText(t, { userName: 'Stella', now }).tasks[0];
+  it("retire « demain 17h », « à 17h », « avant 17h demain » du titre et garde l'heure", () => {
+    for (const t of ["Peux-tu m'envoyer les visuels Black Friday avant demain 17h ?", 'Peux-tu envoyer les visuels Black Friday demain à 17h ?', 'Envoie les visuels Black Friday avant 17h demain stp']) {
+      const task = one(t);
+      expect(task.title).toBe('Envoyer les visuels Black Friday');
+      expect(new Date(task.dueAt).getDate()).toBe(31);
+      expect(new Date(task.dueAt).getHours()).toBe(17);
+    }
+  });
+  it('une durée reste dans le titre', () => {
+    expect(one('Peux-tu relire le brief de 2h demain ?').title).toBe('Relire le brief de 2h');
   });
 });

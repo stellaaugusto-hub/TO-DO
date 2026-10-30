@@ -4,6 +4,7 @@ import { ArrowRight, Check } from 'lucide-react';
 import { api } from '../api.js';
 import { useApp } from '../store.js';
 import { savePrefs, usePrefs } from '../lib/prefs.js';
+import { AppIcon } from './Logo.jsx';
 
 /** Premier lancement : prénom, thème, connexion Google, notifications. */
 export function Onboarding({ onDone }) {
@@ -31,7 +32,7 @@ export function Onboarding({ onDone }) {
         <AnimatePresence mode="wait">
           {step === 0 && (
             <motion.div key="0" {...anim}>
-              <div style={{ fontSize: 56 }}>⚔️</div>
+              <AppIcon size={72} />
               <h1 style={{ fontSize: 36, margin: '10px 0 6px', letterSpacing: '-0.02em' }}>Bienvenue dans QuestFlow</h1>
               <p className="muted" style={{ fontSize: 16, lineHeight: 1.6, margin: 0 }}>Ta to-do, façon Notion, qui devient un jeu : quêtes du jour, XP, séries… et tes mails transformés en missions automatiquement.</p>
               <div style={{ marginTop: 28, fontWeight: 600 }}>Comment tu t'appelles ?</div>
@@ -62,13 +63,13 @@ export function Onboarding({ onDone }) {
             <motion.div key="2" {...anim}>
               <div style={{ fontSize: 56 }}>🔗</div>
               <h1 style={{ fontSize: 32, margin: '10px 0 6px' }}>Connecte ton Google, {name}</h1>
-              <p className="muted" style={{ fontSize: 15, lineHeight: 1.6, margin: 0 }}>Agenda, Gmail et Chat via la connexion officielle de Google : ton navigateur s'ouvre une seule fois pour autoriser, puis tout se synchronise en arrière-plan.</p>
+              <p className="muted" style={{ fontSize: 15, lineHeight: 1.6, margin: 0 }}>QuestFlow ouvre Google Chrome une seule fois : tu te connectes comme d'habitude, et la fenêtre se ferme toute seule. Ensuite, il lit ton agenda, tes mails et Chat en arrière-plan, sans fenêtre. Aucune clé, aucun réglage.</p>
               <div style={{ marginTop: 22 }}>
                 {connected ? (
                   <span className="btn success" style={{ pointerEvents: 'none' }}><Check size={16} /> Compte Google connecté</span>
                 ) : (
                   <button className="btn primary" style={{ height: 38, padding: '0 16px' }} disabled={connecting} onClick={async () => { setConnecting(true); await connectGoogle(); setConnecting(false); }}>
-                    {connecting ? 'Ouvre ton navigateur…' : data.google.configured ? 'Se connecter avec Google' : 'Configurer la connexion Google'}
+                    {connecting ? 'Connexion dans Chrome…' : 'Se connecter avec Google Chrome'}
                   </button>
                 )}
               </div>

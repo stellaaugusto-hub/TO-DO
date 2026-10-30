@@ -13,7 +13,8 @@ export const useApp = create((set, get) => ({
   selectedId: null,
   creating: false,
   pasteOpen: false,
-  googleSetupOpen: false,
+  googleLogin: null, // { phase: opening | waiting | detected | verifying | done | error | no-chrome, email, error }
+  calendarAssist: null,
   paletteOpen: false,
   sync: null, // { label, key, done: [], startedAt }
   success: null, // { task, reward }
@@ -30,16 +31,20 @@ export const useApp = create((set, get) => ({
   closeTask: () => set({ selectedId: null, creating: false }),
   newTask: () => set({ creating: true, selectedId: null }),
   setPasteOpen: (pasteOpen) => set({ pasteOpen }),
-  setGoogleSetupOpen: (googleSetupOpen) => set({ googleSetupOpen }),
+  setGoogleLogin: (googleLogin) => set({ googleLogin }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
 
-  /** Connexion Google : guide de configuration la première fois, sinon navigateur. */
+  /** Connexion Google : une fenêtre Chrome s'ouvre, tu te connectes, elle se ferme toute seule. */
   async connectGoogle() {
-    if (!get().data?.google.configured) return set({ googleSetupOpen: true });
+    if (get().googleLogin && !['done', 'error', 'no-chrome', 'cancelled'].includes(get().googleLogin.phase)) return null;
+    set({ googleLogin: { phase: 'opening' } });
     const r = await api.googleConnect();
-    if (r?.connected) get().toast(`Google connecté${r.email ? ` (${r.email})` : ''} 🎉`, { icon: 'check' });
-    else if (r?.code === 'NOT_CONFIGURED') set({ googleSetupOpen: true });
-    else get().toast(`Connexion Google non terminée : ${r?.error || 'annulée'}`, { icon: 'alert', ms: 6000 });
+    if (r?.connected) {
+      set({ googleLogin: { phase: 'done', email: r.email } });
+      get().toast(`Google connecté${r.email ? ` (${r.email})` : ''}`, { icon: 'check' });
+      setTimeout(() => { if (get().googleLogin?.phase === 'done') set({ googleLogin: null }); }, 1600);
+    } else if (r?.code === 'CANCELLED') set({ googleLogin: null });
+    else set({ googleLogin: { phase: r?.code === 'NO_CHROME' ? 'no-chrome' : 'error', error: r?.error } });
     return r;
   },
 
@@ -67,7 +72,7 @@ export const useApp = create((set, get) => ({
   async runSync() {
     if (get().sync) return;
     const prevTab = get().tab;
-    set({ sync: { key: 'connect', label: 'Connexion à Google…', done: [], startedAt: Date.now() } });
+    set({ sync: { key: 'connect', label: 'Ouverture de Chrome en arrière-plan…', done: [], startedAt: Date.now() } });
     const off = api.onSyncProgress((p) => {
       const s = get().sync;
       if (!s) return;
@@ -87,10 +92,11 @@ export const useApp = create((set, get) => ({
       get().toast(n ? `${n} nouvelle${n > 1 ? 's' : ''} quête${n > 1 ? 's' : ''} trouvée${n > 1 ? 's' : ''} dans tes mails et ton chat` : 'Tout est à jour, aucune nouvelle mission', { icon: n ? 'sparkles' : 'check' });
       if (n) sfx.pop();
       setTimeout(() => set({ highlight: [] }), 6000);
-    } else if (res?.code === 'NOT_LOGGED_IN' || res?.code === 'NOT_CONFIGURED') {
-      get().toast(res.error || 'Connecte ton compte Google pour scanner tes mails', { icon: 'alert' });
-      if (!get().data?.google.configured) set({ googleSetupOpen: true });
-      else get().connectGoogle();
+    } else if (res?.code === 'NOT_LOGGED_IN' || res?.code === 'NO_CHROME') {
+      get().toast(res.code === 'NO_CHROME' ? 'Installe Google Chrome pour relier ton compte Google' : 'Ta session Google a expiré : reconnecte-toi dans Chrome', { icon: 'alert', ms: 6000 });
+      get().connectGoogle();
+    } else if (res?.code === 'BUSY') {
+      get().toast(res.error, { icon: 'alert', ms: 6000 });
     } else {
       get().toast(`Synchronisation incomplète : ${res?.error || 'erreur inconnue'}`, { icon: 'alert', ms: 6000 });
     }

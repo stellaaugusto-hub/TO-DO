@@ -26,7 +26,12 @@ const shots = {
   async '17-terminees'(page) { await page.goto(BASE + '?phase=main&tab=done'); await page.waitForTimeout(1100); },
   async '18-succes-vert'(page) { await page.goto(BASE + '?phase=main&slow=5'); await page.waitForTimeout(1200); await page.locator('.complete-btn').first().click(); await page.waitForTimeout(4200); },
   async '19-succes-fumee'(page) { await page.goto(BASE + '?phase=main&slow=5'); await page.waitForTimeout(1200); await page.locator('.complete-btn').first().click(); await page.waitForTimeout(9800); },
-  async '20-chargement-jeu'(page) { await page.goto(BASE + '?phase=main&syncms=60000'); await page.waitForTimeout(1000); await page.click('.topbar >> text=Scanner'); await page.waitForTimeout(1200); await page.keyboard.press('Space'); for (let i = 0; i < 12; i++) { await page.waitForTimeout(250); if (i % 4 === 1) await page.keyboard.press('Space'); } },
+  async '20-chargement-jeu'(page) { await page.goto(BASE + '?phase=main&syncms=60000'); await page.waitForTimeout(1000); await page.click('.topbar >> text=Scanner'); await page.waitForTimeout(1200); await page.keyboard.press('Space'); await page.waitForTimeout(1750); await page.keyboard.down('Space'); await page.waitForTimeout(260); },
+  async '20b-jeu-sombre'(page) { await page.goto(BASE + '?phase=main&syncms=60000&theme=dark'); await page.waitForTimeout(1000); await page.click('.topbar >> text=Scanner'); await page.waitForTimeout(1500); },
+  async '21-connexion-chrome'(page) { await page.goto(BASE + '?fresh=1&login=hold'); await page.waitForTimeout(900); await page.fill('input', 'Stella'); await page.keyboard.press('Enter'); await page.waitForTimeout(500); await page.click('text=Continuer'); await page.waitForTimeout(500); await page.click('text=Se connecter avec Google Chrome'); await page.waitForTimeout(1600); },
+  async '22-connexion-reussie'(page) { await page.goto(BASE + '?phase=main&fresh=1&tab=settings'); await page.waitForTimeout(800); await page.click('.settings-nav >> text=Google'); await page.waitForTimeout(300); await page.click('text=Se connecter avec Chrome'); await page.waitForTimeout(5600); },
+  async '23-reglages-google'(page) { await page.goto(BASE + '?phase=main&tab=settings'); await page.waitForTimeout(800); await page.click('.settings-nav >> text=Google'); await page.waitForTimeout(300); await page.click('button:has-text("Tester")'); await page.waitForTimeout(1900); },
+  async '24-chrome-absent'(page) { await page.goto(BASE + '?phase=main&fresh=1&nochrome=1'); await page.waitForTimeout(900); await page.click('text=Connecter Google'); await page.waitForTimeout(700); },
 };
 
 (async () => {

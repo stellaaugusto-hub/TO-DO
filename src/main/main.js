@@ -9,8 +9,8 @@ import { createLogger } from './logger.js';
 import { Updater } from './updater.js';
 import { startNotifier } from './notifier.js';
 import { runSync, isSyncing, fetchProfile, calendarWindow } from './sync.js';
-import { GoogleAuth } from './google/oauth.js';
-import { listEvents, createEvent, updateEvent, deleteEvent } from './google/calendar.js';
+import { ChromeSession, findChrome, resetChromeCache } from './google/chrome.js';
+import { listEvents, createEvent, updateEvent, deleteEvent, assistUrl } from './google/calendar.js';
 import { makeTask } from '../shared/task.js';
 import { xpForTask, levelInfo, updateStreak } from '../shared/game.js';
 import { extractTasksFromText } from '../shared/extract.js';
@@ -33,7 +33,7 @@ let win = null;
 let store;
 let log;
 let updater;
-let auth;
+let chrome;
 let autoSyncTimer = null;
 
 const send = (channel, payload) => {
@@ -44,7 +44,7 @@ function publicState() {
   const { processed, notified, googleClient, ...rest } = store.get();
   return {
     ...rest,
-    google: { ...rest.google, connected: !!auth?.connected, configured: !!auth?.configured, clientId: auth?.client.clientId || '' },
+    google: { ...rest.google, connected: !!rest.google.connected, chrome: !!findChrome(), loginOpen: !!chrome?.loginOpen },
     app: { version: app.getVersion(), platform: process.platform, packaged: app.isPackaged },
   };
 }
@@ -180,7 +180,7 @@ async function doSync(sources, { background = false } = {}) {
   try {
     const result = await runSync({
       store,
-      auth,
+      chrome,
       log,
       sources,
       onProgress: (p) => send('sync:progress', p),
@@ -201,12 +201,105 @@ async function doSync(sources, { background = false } = {}) {
   }
 }
 
+/** Liste des événements de la fenêtre courante, relue depuis Google Agenda. */
+async function refreshCalendar(session) {
+  const st = store.get();
+  const events = await listEvents(session, { ...calendarWindow(), me: [st.google.email].filter(Boolean) });
+  store.update((s) => { s.events = events; s.google.lastCalendarSync = new Date().toISOString(); });
+  changed();
+  return events;
+}
+
+/** Connexion : fenêtre Chrome normale, puis vérification sans fenêtre. */
+async function connectGoogle() {
+  const phase = (p) => send('google:login', p);
+  if (!findChrome()) {
+    resetChromeCache();
+    if (!findChrome()) {
+      phase({ phase: 'no-chrome' });
+      return { connected: false, code: 'NO_CHROME', error: "Google Chrome n'est pas installé" };
+    }
+  }
+  try {
+    phase({ phase: 'opening' });
+    const reason = await chrome.login({ onPhase: phase });
+    focusWindow();
+    if (reason === 'cancel') {
+      phase({ phase: 'cancelled' });
+      return { connected: false, code: 'CANCELLED', error: 'annulée' };
+    }
+    phase({ phase: 'verifying' });
+    const account = await fetchProfile(chrome);
+    store.update((s) => {
+      s.google.connected = true;
+      s.google.method = 'chrome';
+      s.google.lastError = null;
+      if (account.email) s.google.email = account.email;
+      s.google.profile = { ...(s.google.profile || {}), ...account };
+    });
+    changed();
+    phase({ phase: 'done', email: account.email });
+    chrome.run((session) => refreshCalendar(session)).catch((e) => log.warn(`agenda: ${e.message}`));
+    return { connected: true, email: account.email };
+  } catch (e) {
+    log.warn(`google connect: ${e.message}`);
+    focusWindow();
+    const notLogged = e.code === 'NOT_LOGGED_IN';
+    phase({ phase: 'error', code: e.code, error: notLogged ? "Connexion non détectée : connecte-toi dans la fenêtre Chrome avant de la fermer." : e.message });
+    store.update((s) => { s.google.connected = false; });
+    changed();
+    return { connected: false, code: e.code, error: e.message };
+  }
+}
+
+/**
+ * Action sur Google Agenda : d'abord en arrière-plan ; si l'interface de Google ne répond
+ * pas comme prévu, Google Agenda s'ouvre dans une fenêtre Chrome sur la bonne page, et
+ * cette fenêtre se ferme toute seule une fois l'événement enregistré.
+ */
+async function calendarAction(kind, fn, ev) {
+  try {
+    const r = await chrome.run(async (session) => {
+      const out = await fn(session);
+      await refreshCalendar(session).catch((e) => log.warn(`agenda: ${e.message}`));
+      return out;
+    });
+    return { ok: true, result: r };
+  } catch (e) {
+    log.warn(`agenda ${kind}: ${e.message}`);
+    if (e.code === 'NOT_LOGGED_IN') {
+      store.update((s) => { s.google.connected = false; });
+      changed();
+      return { ok: false, code: e.code, error: 'Reconnecte ton compte Google' };
+    }
+    if (e.code !== 'UI') return { ok: false, code: e.code, error: e.message };
+    send('calendar:assist', { kind, title: ev?.title });
+    try {
+      // terminé quand on quitte la page de modification (après l'avoir vue au moins une fois)
+      let seenEditor = false;
+      const isDone = async (tab) => {
+        const inEditor = await tab.evaluate(() => /eventedit/.test(location.pathname));
+        if (inEditor) seenEditor = true;
+        return seenEditor && !inEditor;
+      };
+      const outcome = await chrome.assisted(assistUrl(kind, ev, e.eid), { isDone });
+      focusWindow();
+      await chrome.run((session) => refreshCalendar(session)).catch(() => {});
+      send('calendar:assist', null);
+      return outcome === 'done' ? { ok: true, assisted: true } : { ok: false, code: 'ASSIST_CLOSED', error: 'fenêtre Google Agenda fermée sans enregistrer' };
+    } catch (err) {
+      send('calendar:assist', null);
+      return { ok: false, code: err.code, error: err.message };
+    }
+  }
+}
+
 function scheduleAutoSync() {
   clearInterval(autoSyncTimer);
   const minutes = store.get().settings.autoSyncMinutes;
   if (!minutes) return;
   autoSyncTimer = setInterval(async () => {
-    if (isSyncing() || !auth.connected) return;
+    if (isSyncing() || !store.get().google.connected || chrome.visible) return;
     const r = await doSync(['calendar', 'mail', 'chat'], { background: true });
     send('sync:background', r);
   }, minutes * 60e3);
@@ -308,75 +401,90 @@ function registerIpc() {
     return store.get().stats.highScore;
   });
 
-  ipcMain.handle('google:configure', (_e, { clientId, clientSecret }) => {
-    store.update((s) => { s.googleClient = { clientId: (clientId || '').trim(), clientSecret: (clientSecret || '').trim() }; });
-    changed();
-    return auth.configured;
-  });
-
-  ipcMain.handle('google:connect', async () => {
-    try {
-      await auth.login();
-      focusWindow();
-      const profile = await fetchProfile(auth).catch(() => null);
-      store.update((s) => {
-        s.google.connected = true;
-        s.google.lastError = null;
-        if (profile) { s.google.email = profile.email; s.google.profile = profile; }
-      });
-      changed();
-      // premier remplissage de l'agenda
-      listEvents(auth, calendarWindow()).then((events) => { store.update((s) => { s.events = events; }); changed(); }).catch((e) => log.warn(`agenda: ${e.message}`));
-      return { connected: true, email: profile?.email };
-    } catch (e) {
-      log.warn(`google connect: ${e.message}`);
-      focusWindow();
-      return { connected: false, code: e.code, error: e.message };
-    }
-  });
-
+  ipcMain.handle('google:connect', () => connectGoogle());
+  ipcMain.handle('google:finishLogin', () => chrome.finishLogin('done'));
+  ipcMain.handle('google:cancelLogin', () => chrome.finishLogin('cancel'));
   ipcMain.handle('google:disconnect', async () => {
-    await auth.logout();
+    await chrome.forget();
     store.update((s) => { s.google = { ...s.google, connected: false, email: null, profile: null }; s.events = []; });
     changed();
   });
+  ipcMain.handle('google:status', () => store.get().google.connected);
 
-  ipcMain.handle('google:status', () => auth.connected);
+  /** « Tester la lecture » : un passage complet, sans créer de quêtes. */
+  ipcMain.handle('google:test', async () => {
+    const st = store.get();
+    const out = { mails: null, events: null, chats: null, errors: {}, email: null };
+    try {
+      await chrome.run(async (session) => {
+        try {
+          const { fetchRecentMails } = await import('./google/gmail.js');
+          const r = await fetchRecentMails(session, { log, lookbackDays: 3, max: 3 });
+          out.mails = r.scanned;
+          out.email = r.account?.email || null;
+        } catch (e) { if (e.code === 'NOT_LOGGED_IN') throw e; out.errors.mail = e.message; }
+        try { out.events = (await refreshCalendar(session)).length; } catch (e) { out.errors.calendar = e.message; }
+        if (st.settings.syncChat) {
+          try {
+            const { fetchChatMessages } = await import('./google/chat.js');
+            out.chats = (await fetchChatMessages(session, { log, meName: st.google.profile?.name || st.profile.name, lookbackDays: 3, maxConversations: 2 })).conversations;
+          } catch (e) { out.errors.chat = e.message; }
+        }
+      });
+      return { ok: true, ...out };
+    } catch (e) {
+      if (e.code === 'NOT_LOGGED_IN') { store.update((s) => { s.google.connected = false; }); changed(); }
+      return { ok: false, code: e.code, error: e.message, ...out };
+    }
+  });
 
   // --- Agenda : lecture et actions directes sur Google Agenda ----------------------
-  const calAction = async (fn) => {
+  ipcMain.handle('calendar:refresh', async () => {
     try {
-      const r = await fn();
-      const events = await listEvents(auth, calendarWindow());
-      store.update((s) => { s.events = events; s.google.lastCalendarSync = new Date().toISOString(); });
-      changed();
-      return { ok: true, result: r };
+      await chrome.run((session) => refreshCalendar(session));
+      return { ok: true };
     } catch (e) {
-      log.warn(`agenda: ${e.message}`);
+      if (e.code === 'NOT_LOGGED_IN') { store.update((s) => { s.google.connected = false; }); changed(); }
       return { ok: false, code: e.code, error: e.message };
     }
-  };
-  ipcMain.handle('calendar:refresh', () => calAction(() => null));
-  ipcMain.handle('calendar:list', async (_e, from, to) => {
-    try { return { ok: true, events: await listEvents(auth, { from: new Date(from), to: new Date(to) }) }; } catch (e) { return { ok: false, error: e.message, code: e.code }; }
   });
-  ipcMain.handle('calendar:create', (_e, ev) => calAction(() => createEvent(auth, ev)));
-  ipcMain.handle('calendar:update', (_e, ev) => calAction(() => updateEvent(auth, ev)));
-  ipcMain.handle('calendar:delete', (_e, ev) => calAction(() => deleteEvent(auth, ev)));
-  ipcMain.handle('calendar:scheduleTask', (_e, taskId) => calAction(async () => {
+  ipcMain.handle('calendar:list', async (_e, from, to) => {
+    const f = new Date(from);
+    const t = new Date(to);
+    const w = calendarWindow();
+    if (f >= w.from && t <= w.to) return { ok: true, events: store.get().events.filter((e) => e.end > f.toISOString() && e.start < t.toISOString()) };
+    try {
+      const events = await chrome.run((session) => listEvents(session, { from: f, to: t, me: [store.get().google.email].filter(Boolean) }));
+      return { ok: true, events };
+    } catch (e) { return { ok: false, error: e.message, code: e.code }; }
+  });
+  ipcMain.handle('calendar:create', (_e, ev) => calendarAction('create', (session) => createEvent(session, ev), ev));
+  ipcMain.handle('calendar:update', (_e, ev) => {
+    const before = store.get().events.find((x) => x.calendarId === ev.calendarId && x.eventId === ev.eventId) || null;
+    return calendarAction('update', (session) => updateEvent(session, ev, before), ev);
+  });
+  ipcMain.handle('calendar:delete', (_e, ev) => {
+    const full = store.get().events.find((x) => x.calendarId === ev.calendarId && x.eventId === ev.eventId) || ev;
+    return calendarAction('delete', (session) => deleteEvent(session, full), full);
+  });
+  ipcMain.handle('calendar:scheduleTask', async (_e, taskId) => {
     const t = store.get().tasks.find((x) => x.id === taskId);
-    if (!t) throw new Error('Quête introuvable');
+    if (!t) return { ok: false, error: 'Quête introuvable' };
     let start = t.dueAt ? new Date(new Date(t.dueAt).getTime() - 3600e3) : new Date(Math.ceil(Date.now() / 1800e3) * 1800e3 + 1800e3);
     if (start < new Date()) start = new Date(Math.ceil(Date.now() / 1800e3) * 1800e3);
-    const ev = await createEvent(auth, {
+    const ev = {
       title: `⚔️ ${t.title}`,
       description: [t.description, t.sourceMeta?.url ? `Source : ${t.sourceMeta.url}` : '', 'Créé par QuestFlow'].filter(Boolean).join('\n\n'),
-      start,
-      end: new Date(start.getTime() + Math.max(30, (t.difficulty || 2) * 30) * 60e3),
-    });
-    store.update((s) => { const x = s.tasks.find((y) => y.id === taskId); if (x) x.calendarEventId = ev.id; });
-    return ev;
-  }));
+      start: start.toISOString(),
+      end: new Date(start.getTime() + Math.max(30, (t.difficulty || 2) * 30) * 60e3).toISOString(),
+    };
+    const r = await calendarAction('create', (session) => createEvent(session, ev), ev);
+    if (r.ok) {
+      store.update((s) => { const x = s.tasks.find((y) => y.id === taskId); if (x) x.scheduledAt = ev.start; });
+      changed();
+    }
+    return r;
+  });
   ipcMain.handle('calendar:openWeb', () => shell.openExternal('https://calendar.google.com/calendar/u/0/r/week'));
 
   ipcMain.handle('sync:run', (_e, sources) => doSync(sources || ['calendar', 'mail', 'chat']));
@@ -400,7 +508,7 @@ app.whenReady().then(async () => {
   log = createLogger(path.join(app.getPath('userData'), 'logs'));
   log.info(`QuestFlow ${app.getVersion()} (${process.platform}/${process.arch}) démarre`);
 
-  auth = new GoogleAuth({ store, log, bundled: { clientId: pkg.questflow?.googleClientId, clientSecret: pkg.questflow?.googleClientSecret } });
+  chrome = new ChromeSession({ dir: path.join(app.getPath('userData'), 'chrome-profile'), log, diagDir: path.join(app.getPath('userData'), 'logs') });
 
   updater = new Updater({ owner: pkg.questflow?.githubOwner, repo: pkg.questflow?.githubRepo || 'questflow', log });
   updater.on('status', (s) => send('updater:status', s));
@@ -423,7 +531,11 @@ app.whenReady().then(async () => {
     }
   }
 
-  store.update((s) => { s.google.connected = auth.connected; });
+  // anciennes versions : connexion par identifiants Google Cloud -> on repart sur Chrome
+  store.update((s) => {
+    if (s.google.method !== 'chrome') s.google.connected = false;
+    delete s.googleClient;
+  });
 
   startNotifier({
     store,
@@ -445,4 +557,7 @@ app.on('activate', focusWindow);
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
-app.on('before-quit', () => store?.save(true));
+app.on('before-quit', () => {
+  chrome?.killNow();
+  store?.save(true);
+});

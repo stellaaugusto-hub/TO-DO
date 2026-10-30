@@ -474,12 +474,13 @@ function splitActions(rest, lang) {
 
 function removeDatePhrase(text, due) {
   let t = text;
-  if (due?.phrase) {
+  for (const phrase of [due?.phrase, due?.timePhrase]) {
+    if (!phrase) continue;
     const ft = fold(t);
-    const idx = ft.indexOf(due.phrase);
+    const idx = ft.indexOf(phrase);
     if (idx >= 0 && !/\b(de|du|d'|of)\s*$/i.test(t.slice(0, idx))) {
-      const before = t.slice(0, idx).replace(/[\s,]*(\b(avant|pour|d'ici|d’ici|dès|des|jusqu'à|jusqu'a|au plus tard|max|maximum|by|before|until|on|for|due|le|la|the|ce|cette)\b[\s,]*)*$/i, '');
-      t = (before + ' ' + t.slice(idx + due.phrase.length)).replace(/\s+/g, ' ').trim();
+      const before = t.slice(0, idx).replace(/[\s,]*(\b(avant|pour|d'ici|d’ici|dès|des|jusqu'à|jusqu'a|au plus tard|max|maximum|by|before|until|on|for|due|le|la|the|ce|cette|à|a|vers|at)\b[\s,]*)*$/i, '');
+      t = (before + ' ' + t.slice(idx + phrase.length)).replace(/\s+/g, ' ').trim();
     }
   }
   t = t.replace(/[\s,]*\b(au plus tard|si possible|asap|au plus vite|dès que possible|des que possible|en urgence|urgemment|rapidement|en priorité|en priorite|tout de suite|immédiatement|immediatement|as soon as possible|right away)\b/gi, '');

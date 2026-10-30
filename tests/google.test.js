@@ -1,7 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { parseRaw, mailQuery } from '../src/main/google/gmail.js';
-import { cleanChatText } from '../src/main/google/chat.js';
-import { mapEvent, isDeclined } from '../src/main/google/calendar.js';
+import zlib from 'node:zlib';
+import { parseRaw, parseAtom, idTime, rowToMessage } from '../src/main/google/gmail.js';
+import { mentionsMe, cleanMention } from '../src/main/google/chat.js';
+import { eventsFromZip, templateUrl, assistUrl } from '../src/main/google/calendar.js';
+import { parseIcs, expandCalendar, zonedToUtc, calendarIdFromFile, parseLine } from '../src/main/google/ics.js';
+import { unzip } from '../src/main/google/zip.js';
+import { onLoginPage } from '../src/main/google/chrome.js';
 import { extractTasks } from '../src/shared/extract.js';
 import { compareVersions } from '../src/shared/version.js';
 
@@ -30,54 +34,183 @@ const RAW = [
   '',
 ].join('\r\n');
 
-describe('Gmail', () => {
-  it('requête de recherche', () => {
-    expect(mailQuery(7)).toBe('in:inbox newer_than:7d -category:promotions -category:social -category:forums -from:me');
-  });
-  it('message brut -> tâche', async () => {
-    const msg = await parseRaw(Buffer.from(RAW).toString('base64url'), { id: 'abc', threadId: 't1', labelIds: ['INBOX'] });
+describe('Gmail (lu dans Chrome)', () => {
+  it("message d'origine -> tâche", async () => {
+    // « Afficher l'original » renvoie le texte brut avec des fins de ligne \n
+    const msg = await parseRaw(RAW.replace(/\r\n/g, '\n'), { id: '19a2f3b4c5d6e7f8', threadId: '19a2f3b4c5d6e7f8' });
     expect(msg.subject).toBe('Créas Noël');
     expect(msg.from).toEqual({ name: 'Jean Dupont', email: 'jean.dupont@exemple.fr' });
     expect(msg.to).toContain('stella.augusto@innerskin.fr');
-    expect(msg.url).toBe('https://mail.google.com/mail/u/0/#all/t1');
+    expect(msg.url).toBe('https://mail.google.com/mail/u/0/#all/19a2f3b4c5d6e7f8');
     const { tasks } = extractTasks(msg, { now: new Date(2026, 9, 28, 10), userEmail: 'stella.augusto@innerskin.fr', userName: 'Stella' });
     expect(tasks.map((t) => t.title)).toEqual(['Décliner la créa de Noël sur Facebook, Instagram et TikTok']);
     expect(tasks[0].subtasks.map((s) => s.title)).toEqual(['Facebook', 'Instagram', 'TikTok']);
-    expect(tasks[0].sourceMeta.url).toBe('https://mail.google.com/mail/u/0/#all/t1');
+  });
+
+  it("date de réception lue dans l'identifiant Gmail", () => {
+    const ms = Date.UTC(2026, 9, 28, 8, 12);
+    const id = ((BigInt(ms) << 20n) | 0x5a5an).toString(16);
+    expect(idTime(id)).toBe(ms);
+    expect(idTime('pas-hexa')).toBe(0);
+  });
+
+  it("aperçu de la liste quand l'original est inaccessible", () => {
+    const m = rowToMessage({ id: 'abc', threadId: 't9', fromName: 'Léa', fromEmail: 'lea@x.fr', subject: 'Visuels', snippet: 'Tu peux envoyer les visuels avant 17h ?', time: Date.UTC(2026, 9, 28) });
+    expect(m).toMatchObject({ id: 'abc', partial: true, subject: 'Visuels', text: 'Tu peux envoyer les visuels avant 17h ?', from: { name: 'Léa', email: 'lea@x.fr' } });
+  });
+
+  it('flux Atom (secours)', () => {
+    const xml = `<?xml version="1.0"?><feed><entry><title>Brief &amp; planning</title><summary>Peux-tu valider le planning ?</summary>
+      <link rel="alternate" href="https://mail.google.com/mail?account_id=a@b.fr&amp;message_id=19a2f3b4c5d6e7f8&amp;view=conv&amp;extsrc=atom" type="text/html" />
+      <issued>2026-10-28T09:00:00Z</issued><author><name>Léa</name><email>lea@x.fr</email></author></entry></feed>`;
+    expect(parseAtom(xml)).toEqual([{ id: '19a2f3b4c5d6e7f8', threadId: '19a2f3b4c5d6e7f8', subject: 'Brief & planning', snippet: 'Peux-tu valider le planning ?', fromName: 'Léa', fromEmail: 'lea@x.fr', time: Date.UTC(2026, 9, 28, 9) }]);
   });
 });
 
-describe('Google Chat', () => {
-  const me = 'users/111';
+describe('Google Chat (lu dans Chrome)', () => {
+  it('mentions', () => {
+    expect(mentionsMe('@Stella tu peux relire ?', 'Stella Augusto')).toBe(true);
+    expect(mentionsMe('@tous point à 15h', 'Stella')).toBe(true);
+    expect(mentionsMe('@Paul tu peux relire ?', 'Stella')).toBe(false);
+  });
   it('retire ma mention', () => {
-    const text = '@Stella Augusto tu peux mettre à jour le budget ads avant ce soir ?';
-    const msg = { text, annotations: [{ type: 'USER_MENTION', startIndex: 0, length: 15, userMention: { user: { name: me } } }] };
-    expect(cleanChatText(msg, me)).toBe('tu peux mettre à jour le budget ads avant ce soir ?');
-  });
-  it("garde la trace d'une mention d'une autre personne", () => {
-    const text = '@Paul Martin peux-tu envoyer le fichier ?';
-    const msg = { text, annotations: [{ type: 'USER_MENTION', startIndex: 0, length: 12, userMention: { user: { name: 'users/222' } } }] };
-    const cleaned = cleanChatText(msg, me);
-    expect(cleaned).toBe('@autre peux-tu envoyer le fichier ?');
-    expect(extractTasks({ source: 'chat', text: cleaned, from: { name: 'Julie' } }, { userName: 'Stella' }).tasks).toEqual([]);
+    expect(cleanMention('@Stella Augusto tu peux mettre à jour le budget ads avant ce soir ?', 'Stella')).toBe('tu peux mettre à jour le budget ads avant ce soir ?');
+    expect(cleanMention('@Stella, tu peux envoyer le fichier ?', 'Stella')).toBe('tu peux envoyer le fichier ?');
   });
 });
 
-describe('Google Agenda', () => {
-  const cal = { id: 'primary', summary: 'Travail', backgroundColor: '#039be5', accessRole: 'owner' };
-  it('événement horaire', () => {
-    const e = mapEvent({ id: 'x', summary: 'Point ads', start: { dateTime: '2026-10-30T11:00:00+01:00' }, end: { dateTime: '2026-10-30T11:45:00+01:00' }, hangoutLink: 'https://meet.google.com/abc' }, cal);
-    expect(e).toMatchObject({ id: 'primary::x', title: 'Point ads', allDay: false, editable: true, meet: 'https://meet.google.com/abc', color: '#039be5' });
-    expect(new Date(e.end) - new Date(e.start)).toBe(45 * 60e3);
+describe('Chrome', () => {
+  it('page de connexion Google détectée', () => {
+    const at = (href) => {
+      const u = new URL(href);
+      globalThis.location = { hostname: u.hostname, pathname: u.pathname };
+      return onLoginPage();
+    };
+    expect(at('https://accounts.google.com/v3/signin/identifier')).toBe(true);
+    expect(at('https://workspace.google.com/intl/fr/gmail/')).toBe(true);
+    expect(at('https://www.google.com/intl/fr/gmail/about/')).toBe(true);
+    expect(at('https://mail.google.com/mail/u/0/#inbox')).toBe(false);
+    expect(at('https://calendar.google.com/calendar/u/0/r')).toBe(false);
+    delete globalThis.location;
   });
+});
+
+// --- Google Agenda : export .ics -----------------------------------------------------
+
+function makeZip(files) {
+  const locals = [];
+  const central = [];
+  let offset = 0;
+  for (const [name, content] of Object.entries(files)) {
+    const nameBuf = Buffer.from(name);
+    const data = zlib.deflateRawSync(Buffer.from(content));
+    const lh = Buffer.alloc(30);
+    lh.writeUInt32LE(0x04034b50, 0); lh.writeUInt16LE(20, 4); lh.writeUInt16LE(0x800, 6); lh.writeUInt16LE(8, 8);
+    lh.writeUInt32LE(data.length, 18); lh.writeUInt32LE(Buffer.byteLength(content), 22); lh.writeUInt16LE(nameBuf.length, 26);
+    const ch = Buffer.alloc(46);
+    ch.writeUInt32LE(0x02014b50, 0); ch.writeUInt16LE(20, 4); ch.writeUInt16LE(20, 6); ch.writeUInt16LE(0x800, 8); ch.writeUInt16LE(8, 10);
+    ch.writeUInt32LE(data.length, 20); ch.writeUInt32LE(Buffer.byteLength(content), 24); ch.writeUInt16LE(nameBuf.length, 28); ch.writeUInt32LE(offset, 42);
+    locals.push(lh, nameBuf, data);
+    central.push(ch, nameBuf);
+    offset += 30 + nameBuf.length + data.length;
+  }
+  const cd = Buffer.concat(central);
+  const end = Buffer.alloc(22);
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(Object.keys(files).length, 8); end.writeUInt16LE(Object.keys(files).length, 10);
+  end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, cd, end]);
+}
+
+const ics = (events, name = 'Stella Augusto') => ['BEGIN:VCALENDAR', 'VERSION:2.0', `X-WR-CALNAME:${name}`, 'X-WR-TIMEZONE:Europe/Paris',
+  'BEGIN:VTIMEZONE', 'TZID:Europe/Paris', 'BEGIN:STANDARD', 'DTSTART:19701025T030000', 'TZOFFSETFROM:+0200', 'TZOFFSETTO:+0100', 'END:STANDARD', 'END:VTIMEZONE',
+  ...events.flatMap((e) => ['BEGIN:VEVENT', ...e, 'END:VEVENT']), 'END:VCALENDAR'].join('\r\n');
+
+const ME = 'stella.augusto@innerskin.fr';
+const WINDOW = { from: new Date(Date.UTC(2026, 9, 1)), to: new Date(Date.UTC(2026, 11, 1)) };
+const expand = (events, extra = {}) => expandCalendar(parseIcs(ics(events)), { ...WINDOW, calendarId: ME, me: [ME], ...extra });
+
+describe('Google Agenda (export .ics)', () => {
+  it('lignes repliées, paramètres entre guillemets, texte échappé', () => {
+    const cal = parseIcs(ics([['UID:a1@google.com', 'DTSTART;TZID=Europe/Paris:20261030T100000', 'DTEND;TZID=Europe/Paris:20261030T110000', 'SUMMARY:Point créa\\, ', ' Noël', 'DESCRIPTION:Ligne 1\\nLigne 2\\n\\n-::~:~::~:~:~:~::~:~::-\\nRejoindre avec Google Meet']]));
+    expect(cal.name).toBe('Stella Augusto');
+    expect(cal.events[0].summary).toBe('Point créa, Noël');
+    expect(parseLine('ATTENDEE;CN="Dupont: Jean";PARTSTAT=DECLINED:mailto:jean@x.fr')).toEqual({ name: 'ATTENDEE', params: { CN: 'Dupont: Jean', PARTSTAT: 'DECLINED' }, value: 'mailto:jean@x.fr' });
+    const [ev] = expandCalendar(cal, { ...WINDOW, calendarId: ME, me: [ME] });
+    expect(ev.description).toBe('Ligne 1\nLigne 2');
+  });
+
+  it("fuseau horaire et changement d'heure", () => {
+    expect(new Date(zonedToUtc([2026, 10, 20, 9, 0, 0], 'Europe/Paris')).toISOString()).toBe('2026-10-20T07:00:00.000Z');
+    expect(new Date(zonedToUtc([2026, 10, 27, 9, 0, 0], 'Europe/Paris')).toISOString()).toBe('2026-10-27T08:00:00.000Z');
+    expect(new Date(zonedToUtc([2026, 7, 1, 9, 30, 0], 'America/New_York')).toISOString()).toBe('2026-07-01T13:30:00.000Z');
+  });
+
+  it('événement simple, Meet, identifiant Google', () => {
+    const [ev] = expand([['UID:abc123@google.com', 'DTSTART;TZID=Europe/Paris:20261030T100000', 'DTEND;TZID=Europe/Paris:20261030T110000', 'SUMMARY:Point créa', 'LOCATION:Studio', 'X-GOOGLE-CONFERENCE:https://meet.google.com/abc-defg-hij', `ORGANIZER;CN=Stella:mailto:${ME}`]]);
+    expect(ev).toMatchObject({ eventId: 'abc123', calendarId: ME, title: 'Point créa', start: '2026-10-30T09:00:00.000Z', end: '2026-10-30T10:00:00.000Z', allDay: false, location: 'Studio', meet: 'https://meet.google.com/abc-defg-hij', editable: true, recurring: false });
+    expect(ev.url).toMatch(/^https:\/\/calendar\.google\.com\/calendar\/u\/0\/r\/day\/2026\/10\/30$/);
+  });
+
   it('journée entière', () => {
-    const e = mapEvent({ id: 'y', summary: 'Salon', start: { date: '2026-11-02' }, end: { date: '2026-11-03' } }, { ...cal, accessRole: 'reader' });
-    expect(e.allDay).toBe(true);
-    expect(e.editable).toBe(false);
+    const [ev] = expand([['UID:d1@google.com', 'DTSTART;VALUE=DATE:20261102', 'DTEND;VALUE=DATE:20261103', 'SUMMARY:Shooting']]);
+    const s = new Date(ev.start);
+    expect([ev.allDay, s.getFullYear(), s.getMonth(), s.getDate(), s.getHours()]).toEqual([true, 2026, 10, 2, 0]);
+    expect(new Date(ev.end) - s).toBe(86400e3);
   });
-  it('invitation refusée ignorée', () => {
-    expect(isDeclined({ attendees: [{ self: true, responseStatus: 'declined' }] })).toBe(true);
-    expect(isDeclined({ attendees: [{ self: true, responseStatus: 'accepted' }] })).toBe(false);
+
+  it("invitation refusée et événement annulé ignorés, réunion d'un autre en lecture seule", () => {
+    const evs = expand([
+      ['UID:x1@google.com', 'DTSTART:20261030T090000Z', 'DTEND:20261030T100000Z', 'SUMMARY:Refusé', 'ORGANIZER:mailto:boss@x.fr', `ATTENDEE;PARTSTAT=DECLINED:mailto:${ME}`],
+      ['UID:x2@google.com', 'DTSTART:20261030T090000Z', 'DTEND:20261030T100000Z', 'SUMMARY:Annulé', 'STATUS:CANCELLED'],
+      ['UID:x3@google.com', 'DTSTART:20261030T120000Z', 'DTEND:20261030T130000Z', 'SUMMARY:Comité', 'ORGANIZER:mailto:boss@x.fr', `ATTENDEE;PARTSTAT=ACCEPTED:mailto:${ME}`],
+    ]);
+    expect(evs.map((e) => [e.title, e.editable])).toEqual([['Comité', false]]);
+  });
+
+  it("récurrence hebdo : jours, fin, exceptions déplacées ou supprimées, heure d'hiver", () => {
+    const evs = expand([
+      ['UID:w1@google.com', 'DTSTART;TZID=Europe/Paris:20261019T093000', 'DTEND;TZID=Europe/Paris:20261019T100000', 'SUMMARY:Daily', 'RRULE:FREQ=WEEKLY;BYDAY=MO,WE;UNTIL=20261104T225959Z', 'EXDATE;TZID=Europe/Paris:20261021T093000'],
+      ['UID:w1@google.com', 'RECURRENCE-ID;TZID=Europe/Paris:20261028T093000', 'DTSTART;TZID=Europe/Paris:20261028T150000', 'DTEND;TZID=Europe/Paris:20261028T153000', 'SUMMARY:Daily (déplacé)'],
+      ['UID:w1@google.com', 'RECURRENCE-ID;TZID=Europe/Paris:20261102T093000', 'DTSTART;TZID=Europe/Paris:20261102T093000', 'DTEND;TZID=Europe/Paris:20261102T100000', 'SUMMARY:Daily', 'STATUS:CANCELLED'],
+    ]);
+    expect(evs.map((e) => [e.title, e.start, e.eventId]).sort((a, b) => a[1].localeCompare(b[1]))).toEqual([
+      ['Daily', '2026-10-19T07:30:00.000Z', 'w1_20261019T073000Z'],
+      ['Daily', '2026-10-26T08:30:00.000Z', 'w1_20261026T083000Z'],
+      ['Daily (déplacé)', '2026-10-28T14:00:00.000Z', 'w1_20261028T083000Z'],
+      ['Daily', '2026-11-04T08:30:00.000Z', 'w1_20261104T083000Z'],
+    ]);
+  });
+
+  it('récurrence mensuelle (dernier vendredi), quotidienne avec COUNT, annuelle', () => {
+    const monthly = expand([['UID:m1@google.com', 'DTSTART:20260925T160000Z', 'DTEND:20260925T170000Z', 'SUMMARY:Bilan', 'RRULE:FREQ=MONTHLY;BYDAY=-1FR']]);
+    expect(monthly.map((e) => e.start.slice(0, 10))).toEqual(['2026-10-30', '2026-11-27']);
+    const daily = expand([['UID:c1@google.com', 'DTSTART:20261029T080000Z', 'DTEND:20261029T081500Z', 'SUMMARY:Stand-up', 'RRULE:FREQ=DAILY;COUNT=3']]);
+    expect(daily.map((e) => e.start.slice(0, 10))).toEqual(['2026-10-29', '2026-10-30', '2026-10-31']);
+    const yearly = expand([['UID:y1@google.com', 'DTSTART;VALUE=DATE:20201112', 'DTEND;VALUE=DATE:20201113', 'SUMMARY:Anniv Léa', 'RRULE:FREQ=YEARLY']]);
+    expect(yearly.map((e) => [e.title, new Date(e.start).getDate(), new Date(e.start).getMonth()])).toEqual([['Anniv Léa', 12, 10]]);
+  });
+
+  it("archive zip de l'export -> événements de tous les agendas", () => {
+    const zip = makeZip({
+      [`${ME}.ics`]: ics([['UID:p1@google.com', 'DTSTART:20261030T090000Z', 'DTEND:20261030T100000Z', 'SUMMARY:Perso']]),
+      'Marketing_c_abc123@group.calendar.google.com.ics': ics([['UID:g1@google.com', 'DTSTART:20261030T080000Z', 'DTEND:20261030T083000Z', 'SUMMARY:Lancement']], 'Marketing'),
+    });
+    expect(unzip(zip).map((f) => f.name)).toHaveLength(2);
+    const evs = eventsFromZip(zip, { ...WINDOW, me: [ME] });
+    expect(evs.map((e) => [e.title, e.calendar, e.calendarId])).toEqual([
+      ['Lancement', 'Marketing', 'c_abc123@group.calendar.google.com'],
+      ['Perso', 'Stella Augusto', ME],
+    ]);
+    expect(evs[1].color).toBe('#2383E2');
+    expect(calendarIdFromFile('Jours fériés en France_fr.french#holiday@group.v.calendar.google.com.ics')).toBe('fr.french#holiday@group.v.calendar.google.com');
+    expect(calendarIdFromFile('john_doe@gmail.com.ics', ['john_doe@gmail.com'])).toBe('john_doe@gmail.com');
+  });
+
+  it('lien « nouvel événement » pré-rempli', () => {
+    const u = new URL(templateUrl({ title: 'Quête : brief', description: 'Créé par QuestFlow', start: '2026-10-30T09:00:00.000Z', end: '2026-10-30T10:30:00.000Z' }));
+    expect(u.origin + u.pathname).toBe('https://calendar.google.com/calendar/render');
+    expect(Object.fromEntries([...u.searchParams].filter(([k]) => k !== 'ctz'))).toEqual({ action: 'TEMPLATE', text: 'Quête : brief', dates: '20261030T090000Z/20261030T103000Z', details: 'Créé par QuestFlow' });
+    expect(assistUrl('delete', { start: '2026-10-30T09:00:00.000Z' }, 'ZWlk')).toBe('https://calendar.google.com/calendar/u/0/r/eventedit/ZWlk');
   });
 });
 

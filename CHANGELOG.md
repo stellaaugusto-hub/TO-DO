@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 1.1.0
+- Connexion Google sans aucune clé : QuestFlow ouvre Google Chrome une seule fois pour que tu te connectes, détecte la connexion et referme la fenêtre. Ensuite, Gmail, Agenda et Chat sont lus en arrière-plan, sans fenêtre.
+- Plus de projet Google Cloud ni d'identifiants à copier.
+- Google Agenda : lecture de tous tes agendas avec les événements récurrents ; création, renommage et suppression directement dans Google Agenda.
+- Bouton « Tester la lecture » dans Réglages → Google.
+- Nouveau logo et nouvelle icône d'app, sobres, façon Notion.
+- Nouveau mini-jeu « Coche ! » dans le même style (clair et sombre).
+- Titres de quêtes plus propres : « demain 17h », « à 17h » ne restent plus dans le titre.
+
 ## 1.0.0
 - Première version de QuestFlow.
 - Quêtes du jour, to-do triée par urgence, XP, niveaux, séries de jours.
