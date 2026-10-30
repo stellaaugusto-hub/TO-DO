@@ -301,7 +301,7 @@ export class Runner {
     c.fillStyle = 'rgba(7,7,26,0.55)';
     c.fillRect(0, 80, W, 76);
     c.fillStyle = '#fff';
-    c.font = '700 22px "Sora Variable", sans-serif';
+    c.font = '700 22px -apple-system, "Inter Variable", sans-serif';
     c.fillText(title, W / 2, 112);
     c.fillStyle = '#c4b5fd';
     c.font = '500 13px "Inter Variable", sans-serif';

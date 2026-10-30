@@ -1,165 +1,268 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Globe, RefreshCw, Bell, Gamepad2, Download, FolderOpen, LogOut } from 'lucide-react';
+import { User, Palette, LayoutGrid, Hash, Globe, RefreshCw, Bell, Gamepad2, Download, LogOut, FolderOpen, Eye, EyeOff, ArrowUp, ArrowDown } from 'lucide-react';
 import { useApp } from '../store.js';
 import { api } from '../api.js';
-import { Toggle } from '../components/bits.jsx';
+import { usePrefs, savePrefs } from '../lib/prefs.js';
+import { ACCENTS, NOTION_COLORS, COLOR_LABEL, coverCss } from '../lib/notion.js';
 import { relative } from '../lib/format.js';
 import { setSoundEnabled } from '../lib/sound.js';
+import { Toggle, Tag, MenuButton, Popover } from '../components/ui.jsx';
+import { IconPicker, CoverPicker, ColorList } from '../components/Pickers.jsx';
 
 function Row({ title, sub, children }) {
   return (
-    <div className="setting-row">
+    <div className="set-row">
       <div className="lbl"><b>{title}</b>{sub && <span>{sub}</span>}</div>
       {children}
     </div>
   );
 }
 
+const SECTIONS = [
+  { id: 'account', label: 'Mon compte', icon: User },
+  { id: 'appearance', label: 'Apparence', icon: Palette },
+  { id: 'pages', label: 'Pages', icon: LayoutGrid },
+  { id: 'tags', label: 'Tags', icon: Hash },
+  { id: 'google', label: 'Google', icon: Globe },
+  { id: 'sync', label: 'Synchronisation', icon: RefreshCw },
+  { id: 'notifications', label: 'Notifications', icon: Bell },
+  { id: 'game', label: 'Jeu & progression', icon: Gamepad2 },
+  { id: 'updates', label: 'Mises à jour', icon: Download },
+];
+
+function PageRow({ id, p, index, total, order }) {
+  const [iconOpen, setIconOpen] = useState(false);
+  const [coverOpen, setCoverOpen] = useState(false);
+  const [iconEl, setIconEl] = useState(null);
+  const [coverEl, setCoverEl] = useState(null);
+  const set = (patch) => savePrefs({ pages: { [id]: patch } });
+  const move = (d) => {
+    const o = [...order];
+    const [x] = o.splice(index, 1);
+    o.splice(index + d, 0, x);
+    savePrefs({ pageOrder: o });
+  };
+  return (
+    <div className="set-row">
+      <button ref={setIconEl} className="btn icon" style={{ fontSize: 20, width: 36, height: 36 }} onClick={() => setIconOpen(true)}>{p.emoji}</button>
+      <input className="input" style={{ maxWidth: 230 }} defaultValue={p.title} onBlur={(e) => e.target.value.trim() && e.target.value !== p.title && set({ title: e.target.value.trim() })} />
+      <button ref={setCoverEl} className="btn sm outline" onClick={() => setCoverOpen(true)}>
+        <span style={{ width: 28, height: 16, borderRadius: 3, background: coverCss(p.cover) || 'var(--active)', backgroundSize: 'cover', display: 'inline-block' }} />
+        Couverture
+      </button>
+      <span className="grow" />
+      <button className="btn sm icon" disabled={index === 0} onClick={() => move(-1)} title="Monter"><ArrowUp size={14} /></button>
+      <button className="btn sm icon" disabled={index === total - 1} onClick={() => move(1)} title="Descendre"><ArrowDown size={14} /></button>
+      <button className="btn sm icon" onClick={() => set({ hidden: !p.hidden })} title={p.hidden ? 'Afficher dans la barre latérale' : 'Masquer'}>{p.hidden ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+      <Popover anchor={iconEl} open={iconOpen} onClose={() => setIconOpen(false)} width={420} className="menu picker">
+        <IconPicker emoji={p.emoji} withColor={false} close={() => setIconOpen(false)} onChange={({ emoji }) => emoji && set({ emoji })} />
+      </Popover>
+      <Popover anchor={coverEl} open={coverOpen} onClose={() => setCoverOpen(false)} width={420} className="menu picker">
+        <CoverPicker value={p.cover} close={() => setCoverOpen(false)} onChange={(cover) => set({ cover })} />
+      </Popover>
+    </div>
+  );
+}
+
 export function SettingsView() {
   const { data, updater, toast, runSync, connectGoogle, setGoogleSetupOpen } = useApp();
+  const prefs = usePrefs();
+  const a = prefs.appearance;
   const s = data.settings;
+  const g = data.google;
+  const [section, setSection] = useState('account');
   const [name, setName] = useState(data.profile.name);
   const [connecting, setConnecting] = useState(false);
   useEffect(() => setName(data.profile.name), [data.profile.name]);
   const set = (patch) => api.setSettings(patch);
-  const g = data.google;
-
-  const panels = [
-    {
-      icon: User, title: 'Profil',
-      body: (
-        <>
-          <Row title="Ton prénom" sub="Affiché en plein écran à chaque ouverture (« Bonjour … »)">
-            <input className="input" style={{ width: 170 }} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name !== data.profile.name && api.setProfile({ name: name.trim() }).then(() => toast('Prénom mis à jour'))} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} />
-          </Row>
-          <Row title="Sons" sub="Petits effets sonores (validation, niveau, jeu)">
-            <Toggle on={s.sounds} onChange={(v) => { setSoundEnabled(v); set({ sounds: v }); }} />
-          </Row>
-        </>
-      ),
-    },
-    {
-      icon: Globe, title: 'Compte Google',
-      body: (
-        <>
-          <Row title={g.connected ? 'Connecté' : g.configured ? 'Non connecté' : 'À configurer (une fois)'} sub={g.connected ? `${g.email || 'Compte Google'} · dernier scan ${relative(g.lastSync)}` : 'Agenda, Gmail et Chat via la connexion officielle Google'}>
-            <span className={`status-dot ${g.connected ? 'ok' : 'warn'}`} />
-            {g.connected ? (
-              <button className="btn small" onClick={() => api.googleDisconnect()}><LogOut size={14} /> Déconnecter</button>
-            ) : (
-              <button className="btn small primary" disabled={connecting} onClick={async () => { setConnecting(true); await connectGoogle(); setConnecting(false); }}>
-                {connecting ? 'Ouvre ton navigateur…' : g.configured ? 'Se connecter' : 'Configurer'}
-              </button>
-            )}
-          </Row>
-          {g.lastError && <div className="dim" style={{ fontSize: 12, padding: '0 0 10px' }}>⚠️ Dernière erreur : {typeof g.lastError === 'string' ? g.lastError : Object.entries(g.lastError).map(([k, v]) => `${k} : ${v}`).join(' · ')}</div>}
-          <Row title="Identifiants Google Cloud" sub={g.configured ? `ID client : ${g.clientId.slice(0, 22)}…` : 'Guide pas à pas (≈ 10 min)'}>
-            <button className="btn small" onClick={() => setGoogleSetupOpen(true)}>{g.configured ? 'Modifier' : 'Ouvrir le guide'}</button>
-          </Row>
-          <Row title="Lire Google Chat" sub="Messages directs et mentions">
-            <Toggle on={s.syncChat} onChange={(v) => set({ syncChat: v })} />
-          </Row>
-        </>
-      ),
-    },
-    {
-      icon: RefreshCw, title: 'Synchronisation',
-      body: (
-        <>
-          <Row title="Scan automatique" sub="Mails, chat et agenda en arrière-plan">
-            <select className="select" style={{ width: 150 }} value={s.autoSyncMinutes} onChange={(e) => set({ autoSyncMinutes: +e.target.value })}>
-              <option value={0}>Désactivé</option>
-              <option value={10}>Toutes les 10 min</option>
-              <option value={20}>Toutes les 20 min</option>
-              <option value={60}>Toutes les heures</option>
-            </select>
-          </Row>
-          <Row title="Mails analysés" sub="Ancienneté maximale des mails lus">
-            <select className="select" style={{ width: 150 }} value={s.mailLookbackDays} onChange={(e) => set({ mailLookbackDays: +e.target.value })}>
-              <option value={2}>2 derniers jours</option>
-              <option value={7}>7 derniers jours</option>
-              <option value={14}>14 derniers jours</option>
-              <option value={30}>30 derniers jours</option>
-            </select>
-          </Row>
-          <Row title="Scanner maintenant">
-            <button className="btn small" onClick={runSync}><RefreshCw size={14} /> Lancer</button>
-          </Row>
-        </>
-      ),
-    },
-    {
-      icon: Bell, title: 'Notifications',
-      body: (
-        <>
-          <Row title="Notifications" sub="Quêtes prioritaires, échéances, réunions">
-            <Toggle on={s.notifications} onChange={(v) => set({ notifications: v })} />
-          </Row>
-          <Row title="Prévenir avant une quête prioritaire">
-            <select className="select" style={{ width: 150 }} value={s.notifyLeadMinutes} onChange={(e) => set({ notifyLeadMinutes: +e.target.value })}>
-              <option value={15}>15 min avant</option>
-              <option value={30}>30 min avant</option>
-              <option value={60}>1 h avant</option>
-              <option value={120}>2 h avant</option>
-            </select>
-          </Row>
-          <Row title="Récap du matin" sub={`Vers ${s.digestHour} h : tes quêtes du jour`}>
-            <Toggle on={s.morningDigest} onChange={(v) => set({ morningDigest: v })} />
-          </Row>
-          <Row title="Tester">
-            <button className="btn small" onClick={() => api.testNotification()}><Bell size={14} /> Envoyer un test</button>
-          </Row>
-        </>
-      ),
-    },
-    {
-      icon: Gamepad2, title: 'Jeu & progression',
-      body: (
-        <>
-          <Row title="Record au Quest Runner" sub={`${data.stats.gamesPlayed || 0} parties jouées pendant les chargements`}><span className="mono" style={{ fontSize: 18, color: '#fde68a' }}>{data.stats.highScore || 0}</span></Row>
-          <Row title="XP total"><span className="mono" style={{ fontSize: 18 }}>{data.stats.xp}</span></Row>
-        </>
-      ),
-    },
-    {
-      icon: Download, title: 'Mises à jour',
-      body: (
-        <>
-          <Row title={`Version ${data.app.version}`} sub={updater?.state === 'uptodate' ? 'Tu as la dernière version ✓' : updater?.state === 'available' ? `Version ${updater.version} disponible` : updater?.state === 'disabled' ? 'Automatiques dans l’app installée' : updater?.state === 'error' ? `Erreur : ${updater.error}` : 'Vérifiées à chaque lancement'}>
-            {updater?.state === 'available' ? (
-              <button className="btn small primary" onClick={() => api.installUpdate()}><Download size={14} /> Installer</button>
-            ) : (
-              <button className="btn small" onClick={async () => { const st = await api.checkUpdates(); toast(st.state === 'uptodate' ? 'Tu as déjà la dernière version' : st.state === 'available' ? `Version ${st.version} disponible` : 'Vérification terminée'); }}><RefreshCw size={14} /> Vérifier</button>
-            )}
-          </Row>
-          <Row title="Journal de diagnostic" sub="À m'envoyer si quelque chose ne marche pas">
-            <button className="btn small" onClick={() => api.openLogs()}><FolderOpen size={14} /> Ouvrir</button>
-          </Row>
-        </>
-      ),
-    },
-  ];
+  const ap = (patch) => savePrefs({ appearance: patch });
+  const tags = [...new Set(data.tasks.flatMap((t) => t.tags || []))].sort();
 
   return (
-    <div>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">Réglages</h1>
-          <div className="page-sub">Tout se personnalise, et tout reste sur ton Mac.</div>
-        </div>
-      </div>
-      <div className="settings">
-        {panels.map((p, i) => {
-          const I = p.icon;
-          return (
-            <motion.div key={p.title} className="panel" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}>
-              <h3><I size={16} color="#a78bfa" /> {p.title}</h3>
-              {p.body}
-            </motion.div>
-          );
-        })}
-      </div>
+    <div className="settings-layout">
+      <nav className="settings-nav">
+        <div className="menu-title" style={{ padding: '0 8px 8px' }}>Réglages</div>
+        {SECTIONS.map((x) => (
+          <button key={x.id} className={`sb-item ${section === x.id ? 'active' : ''}`} onClick={() => setSection(x.id)}>
+            <span className="ico"><x.icon size={16} /></span>{x.label}
+          </button>
+        ))}
+      </nav>
+      <motion.div key={section} className="settings-main" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.15 }}>
+        {section === 'account' && (
+          <>
+            <h1>Mon compte</h1>
+            <div className="set-group">
+              <h3>Profil</h3>
+              <Row title="Prénom" sub="Affiché en plein écran à chaque ouverture : « Bonjour … »">
+                <input className="input" style={{ width: 200 }} value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && name !== data.profile.name && api.setProfile({ name: name.trim() }).then(() => toast('Prénom mis à jour'))} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} />
+              </Row>
+            </div>
+          </>
+        )}
+
+        {section === 'appearance' && (
+          <>
+            <h1>Apparence</h1>
+            <div className="set-group">
+              <h3>Thème</h3>
+              <div className="theme-cards" style={{ padding: '12px 0' }}>
+                {[['light', 'Clair', '#fff', '#f8f8f7'], ['dark', 'Sombre', '#191919', '#202020'], ['system', 'Comme le Mac', 'linear-gradient(90deg,#fff 50%,#191919 50%)', 'linear-gradient(90deg,#f8f8f7 50%,#202020 50%)']].map(([k, l, bg, sb]) => (
+                  <button key={k} className={`theme-card ${a.theme === k ? 'on' : ''}`} onClick={() => ap({ theme: k })}>
+                    <div className="mini"><span style={{ background: sb }} /><span style={{ background: bg }} /></div>
+                    {l}
+                  </button>
+                ))}
+              </div>
+              <Row title="Couleur d'accent" sub="Boutons, cases cochées, barre d'XP">
+                <div className="swatches">
+                  {Object.entries(ACCENTS).map(([k, [c]]) => <button key={k} className={`swatch ${a.accent === k ? 'on' : ''}`} style={{ background: c }} onClick={() => ap({ accent: k })} title={k} />)}
+                </div>
+              </Row>
+            </div>
+            <div className="set-group">
+              <h3>Texte</h3>
+              <Row title="Police">
+                <div className="seg">
+                  {[['default', 'Défaut', 'var(--font-default)'], ['serif', 'Serif', 'var(--font-serif)'], ['mono', 'Mono', 'var(--font-mono)']].map(([k, l, f]) => (
+                    <button key={k} className={a.font === k ? 'on' : ''} style={{ fontFamily: f }} onClick={() => ap({ font: k })}>{l}</button>
+                  ))}
+                </div>
+              </Row>
+              <Row title="Petit texte" sub="Plus d'informations à l'écran"><Toggle on={a.smallText} onChange={(v) => ap({ smallText: v })} /></Row>
+              <Row title="Pleine largeur" sub="Les pages utilisent toute la largeur de la fenêtre"><Toggle on={a.fullWidth} onChange={(v) => ap({ fullWidth: v })} /></Row>
+            </div>
+            <div className="set-group">
+              <h3>Expérience</h3>
+              <Row title="Mode jeu" sub="XP, niveaux, séries de jours"><Toggle on={a.gamification} onChange={(v) => ap({ gamification: v })} /></Row>
+              <Row title="Animations réduites" sub="Moins de mouvements dans l'interface"><Toggle on={a.reduceMotion} onChange={(v) => ap({ reduceMotion: v })} /></Row>
+              <Row title="Sons" sub="Petits effets sonores (validation, niveau, jeu)"><Toggle on={s.sounds} onChange={(v) => { setSoundEnabled(v); set({ sounds: v }); }} /></Row>
+            </div>
+          </>
+        )}
+
+        {section === 'pages' && (
+          <>
+            <h1>Pages</h1>
+            <div className="muted" style={{ fontSize: 14 }}>Renomme tes pages, change leur emoji et leur couverture, réordonne-les ou masque-les de la barre latérale.</div>
+            <div className="set-group">
+              <h3>Barre latérale</h3>
+              {prefs.pageOrder.map((id, i) => <PageRow key={id} id={id} p={prefs.pages[id]} index={i} total={prefs.pageOrder.length} order={prefs.pageOrder} />)}
+            </div>
+          </>
+        )}
+
+        {section === 'tags' && (
+          <>
+            <h1>Tags</h1>
+            <div className="muted" style={{ fontSize: 14 }}>Choisis la couleur de chaque tag (comme les options d'une propriété Notion).</div>
+            <div className="set-group">
+              <h3>{tags.length} tag{tags.length > 1 ? 's' : ''}</h3>
+              {tags.map((t) => (
+                <div key={t} className="set-row">
+                  <Tag color={prefs.tagColors[t] || 'purple'}>{t}</Tag>
+                  <span className="dim" style={{ fontSize: 12.5 }}>{data.tasks.filter((x) => (x.tags || []).includes(t)).length} quête(s)</span>
+                  <span className="grow" />
+                  <MenuButton align="right" width={210} button={<button className="btn sm outline">{COLOR_LABEL[prefs.tagColors[t] || 'purple']}</button>}>
+                    {(c) => <ColorList value={prefs.tagColors[t] || 'purple'} onChange={(col) => { savePrefs({ tagColors: { [t]: col } }); c(); }} />}
+                  </MenuButton>
+                </div>
+              ))}
+              {!tags.length && <div className="muted" style={{ padding: '12px 0' }}>Aucun tag pour l'instant.</div>}
+            </div>
+          </>
+        )}
+
+        {section === 'google' && (
+          <>
+            <h1>Google</h1>
+            <div className="set-group">
+              <h3>Compte</h3>
+              <Row title={g.connected ? 'Connecté' : g.configured ? 'Non connecté' : 'À configurer (une seule fois)'} sub={g.connected ? `${g.email || 'Compte Google'} · dernier scan ${relative(g.lastSync)}` : 'Agenda, Gmail et Chat via la connexion officielle de Google'}>
+                <span className={`status-dot ${g.connected ? 'ok' : 'warn'}`} />
+                {g.connected ? (
+                  <button className="btn sm outline" onClick={() => api.googleDisconnect()}><LogOut size={14} /> Déconnecter</button>
+                ) : (
+                  <button className="btn sm primary" disabled={connecting} onClick={async () => { setConnecting(true); await connectGoogle(); setConnecting(false); }}>{connecting ? 'Ouvre ton navigateur…' : g.configured ? 'Se connecter' : 'Configurer'}</button>
+                )}
+              </Row>
+              {g.lastError && <div className="callout" style={{ margin: '4px 0' }}><span className="emoji">⚠️</span><div style={{ fontSize: 13.5 }}>Dernière erreur : {typeof g.lastError === 'string' ? g.lastError : Object.entries(g.lastError).map(([k, v]) => `${k} : ${v}`).join(' · ')}</div></div>}
+              <Row title="Identifiants Google Cloud" sub={g.configured ? `ID client : ${g.clientId.slice(0, 24)}…` : 'Guide pas à pas (≈ 10 min)'}>
+                <button className="btn sm outline" onClick={() => setGoogleSetupOpen(true)}>{g.configured ? 'Modifier' : 'Ouvrir le guide'}</button>
+              </Row>
+              <Row title="Lire Google Chat" sub="Messages directs et mentions"><Toggle on={s.syncChat} onChange={(v) => set({ syncChat: v })} /></Row>
+            </div>
+          </>
+        )}
+
+        {section === 'sync' && (
+          <>
+            <h1>Synchronisation</h1>
+            <div className="set-group">
+              <h3>Scan des mails, du chat et de l'agenda</h3>
+              <Row title="Scan automatique" sub="En arrière-plan, avec notification des nouvelles missions">
+                <select className="select" style={{ width: 180 }} value={s.autoSyncMinutes} onChange={(e) => set({ autoSyncMinutes: +e.target.value })}>
+                  <option value={0}>Désactivé</option><option value={10}>Toutes les 10 min</option><option value={20}>Toutes les 20 min</option><option value={60}>Toutes les heures</option>
+                </select>
+              </Row>
+              <Row title="Mails analysés" sub="Ancienneté maximale">
+                <select className="select" style={{ width: 180 }} value={s.mailLookbackDays} onChange={(e) => set({ mailLookbackDays: +e.target.value })}>
+                  <option value={2}>2 derniers jours</option><option value={7}>7 derniers jours</option><option value={14}>14 derniers jours</option><option value={30}>30 derniers jours</option>
+                </select>
+              </Row>
+              <Row title="Scanner maintenant"><button className="btn sm outline" onClick={runSync}><RefreshCw size={14} /> Lancer</button></Row>
+            </div>
+          </>
+        )}
+
+        {section === 'notifications' && (
+          <>
+            <h1>Notifications</h1>
+            <div className="set-group">
+              <h3>Rappels</h3>
+              <Row title="Notifications" sub="Quêtes prioritaires, échéances, réunions"><Toggle on={s.notifications} onChange={(v) => set({ notifications: v })} /></Row>
+              <Row title="Prévenir avant une quête prioritaire">
+                <select className="select" style={{ width: 180 }} value={s.notifyLeadMinutes} onChange={(e) => set({ notifyLeadMinutes: +e.target.value })}>
+                  <option value={15}>15 min avant</option><option value={30}>30 min avant</option><option value={60}>1 h avant</option><option value={120}>2 h avant</option>
+                </select>
+              </Row>
+              <Row title="Récap du matin" sub={`Vers ${s.digestHour} h : tes quêtes du jour`}><Toggle on={s.morningDigest} onChange={(v) => set({ morningDigest: v })} /></Row>
+              <Row title="Tester"><button className="btn sm outline" onClick={() => api.testNotification()}><Bell size={14} /> Envoyer un test</button></Row>
+            </div>
+          </>
+        )}
+
+        {section === 'game' && (
+          <>
+            <h1>Jeu & progression</h1>
+            <div className="set-group">
+              <h3>Statistiques</h3>
+              <Row title="XP total"><span className="mono">{data.stats.xp}</span></Row>
+              <Row title="Quêtes accomplies"><span className="mono">{data.stats.completedCount || 0}</span></Row>
+              <Row title="Meilleure série"><span className="mono">{data.stats.bestStreak || 0} jours</span></Row>
+              <Row title="Record au Quest Runner" sub={`${data.stats.gamesPlayed || 0} parties jouées pendant les chargements`}><span className="mono">{data.stats.highScore || 0}</span></Row>
+            </div>
+          </>
+        )}
+
+        {section === 'updates' && (
+          <>
+            <h1>Mises à jour</h1>
+            <div className="set-group">
+              <h3>QuestFlow {data.app.version}</h3>
+              <Row title="Mises à jour automatiques" sub={updater?.state === 'uptodate' ? 'Tu as la dernière version ✓' : updater?.state === 'available' ? `Version ${updater.version} disponible` : updater?.state === 'error' ? `Erreur : ${updater.error}` : 'Vérifiées à chaque lancement'}>
+                {updater?.state === 'available' ? (
+                  <button className="btn sm primary" onClick={() => api.installUpdate()}><Download size={14} /> Installer</button>
+                ) : (
+                  <button className="btn sm outline" onClick={async () => { const st = await api.checkUpdates(); toast(st.state === 'uptodate' ? 'Tu as déjà la dernière version' : st.state === 'available' ? `Version ${st.version} disponible` : 'Vérification terminée'); }}><RefreshCw size={14} /> Vérifier</button>
+                )}
+              </Row>
+              <Row title="Journal de diagnostic" sub="À m'envoyer si quelque chose ne marche pas"><button className="btn sm outline" onClick={() => api.openLogs()}><FolderOpen size={14} /> Ouvrir</button></Row>
+            </div>
+          </>
+        )}
+      </motion.div>
     </div>
   );
 }

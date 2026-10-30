@@ -4,7 +4,8 @@ import { ChevronLeft, ChevronRight, Plus, RefreshCw, ExternalLink, X, MapPin, Vi
 import { useApp } from '../store.js';
 import { api } from '../api.js';
 import { isSameDay, startOfDay } from '../../shared/dates.js';
-import { DeleteButton } from '../components/bits.jsx';
+import { ConfirmButton } from '../components/ui.jsx';
+import { usePrefs } from '../lib/prefs.js';
 
 const H0 = 7;
 const H1 = 23;
@@ -79,36 +80,36 @@ function EventModal({ ev, onClose }) {
   return (
     <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <motion.div className="modal" style={{ width: 560 }} initial={{ y: 30, scale: 0.95, opacity: 0 }} animate={{ y: 0, scale: 1, opacity: 1 }} exit={{ y: 20, opacity: 0 }} transition={{ type: 'spring', stiffness: 320, damping: 28 }}>
-        <div className="modal-head" style={{ '--c': ev.color || '#22d3ee' }}>
-          <span className="icon-tile" style={{ '--c': ev.color || '#06b6d4' }}><CalendarDays size={20} /></span>
+        <div className="modal-head row" style={{ alignItems: 'flex-start' }}>
+          <span className="dot" style={{ background: ev.color || 'var(--accent)', width: 12, height: 12, marginTop: 34, borderRadius: 3 }} />
           <div style={{ flex: 1 }}>
-            <div className="dim" style={{ fontSize: 12, marginBottom: 2 }}>{isNew ? 'Nouvel événement' : ev.calendar}{readOnly ? ' · lecture seule' : ''}</div>
-            <input className="title-input" autoFocus={isNew} value={title} disabled={readOnly} onChange={(e) => setTitle(e.target.value)} placeholder="Titre de l'événement" onKeyDown={(e) => e.key === 'Enter' && !readOnly && save()} />
+            <div className="dim" style={{ fontSize: 12.5, marginBottom: 2 }}>{isNew ? 'Nouvel événement' : ev.calendar}{readOnly ? ' · lecture seule' : ''}</div>
+            <input className="peek-title" style={{ fontSize: 24, margin: 0 }} autoFocus={isNew} value={title} disabled={readOnly} onChange={(e) => setTitle(e.target.value)} placeholder="Titre de l'événement" onKeyDown={(e) => e.key === 'Enter' && !readOnly && save()} />
           </div>
-          <button className="xbtn" onClick={onClose}><X size={18} /></button>
+          <button className="btn sm icon" onClick={onClose}><X size={17} /></button>
         </div>
         <div className="modal-body">
-          <div className="field full">
+          <div className="field">
             <label>Quand</label>
             <div className="row" style={{ flexWrap: 'wrap' }}>
               <input type="date" className="input" style={{ width: 160 }} value={day} disabled={readOnly} onChange={(e) => setDay(e.target.value)} />
               {!allDay && <><input type="time" className="input" style={{ width: 110 }} value={from} disabled={readOnly} onChange={(e) => setFrom(e.target.value)} /><span className="dim">→</span><input type="time" className="input" style={{ width: 110 }} value={to} disabled={readOnly} onChange={(e) => setTo(e.target.value)} /></>}
-              <div className="seg"><button className={allDay ? 'on' : ''} disabled={readOnly} onClick={() => setAllDay(!allDay)}>Journée entière</button></div>
+              <button className={`chip ${allDay ? 'on' : ''}`} disabled={readOnly} onClick={() => setAllDay(!allDay)}>Journée entière</button>
             </div>
           </div>
-          <div className="field full">
+          <div className="field">
             <label>Lieu</label>
             <input className="input" value={location} disabled={readOnly} onChange={(e) => setLocation(e.target.value)} placeholder="Adresse, salle…" />
           </div>
-          <div className="field full">
+          <div className="field">
             <label>Description</label>
             <textarea className="textarea" value={description} disabled={readOnly} onChange={(e) => setDescription(e.target.value)} />
           </div>
         </div>
         <div className="modal-foot">
-          {!isNew && !readOnly && <DeleteButton up label={title || 'cet événement'} onConfirm={remove} />}
-          {ev.meet && <button className="btn small" onClick={() => api.openExternal(ev.meet)}><Video size={14} /> Rejoindre</button>}
-          {ev.url && <button className="btn small" onClick={() => api.openExternal(ev.url)}><ExternalLink size={14} /> Google Agenda</button>}
+          {!isNew && !readOnly && <ConfirmButton align="left" button={<button className="btn sm danger"><Trash2 size={14} /> Supprimer</button>} message={<>Supprimer « {title || 'cet événement'} » de Google Agenda ?</>} onConfirm={remove} />}
+          {ev.meet && <button className="btn sm" onClick={() => api.openExternal(ev.meet)}><Video size={14} /> Rejoindre</button>}
+          {ev.url && <button className="btn sm" onClick={() => api.openExternal(ev.url)}><ExternalLink size={14} /> Google Agenda</button>}
           <span className="grow" />
           <button className="btn" onClick={onClose}>{readOnly ? 'Fermer' : 'Annuler'}</button>
           {!readOnly && <button className="btn primary" disabled={busy} onClick={save}>{isNew ? <><Plus size={16} /> Créer</> : 'Enregistrer'}</button>}
@@ -120,6 +121,7 @@ function EventModal({ ev, onClose }) {
 
 export function AgendaView() {
   const { data, connectGoogle, toast } = useApp();
+  const prefs = usePrefs();
   const [week, setWeek] = useState(() => mondayOf(new Date()));
   const [extra, setExtra] = useState([]);
   const [editing, setEditing] = useState(null);
@@ -143,11 +145,11 @@ export function AgendaView() {
 
   if (!data.google.connected) {
     return (
-      <div className="panel connect-card">
-        <div className="google-g"><CalendarDays size={28} color="#4285f4" /></div>
-        <div className="page-title" style={{ fontSize: 24 }}>Connecte Google Agenda</div>
+      <div className="page" style={{ paddingTop: 80, textAlign: 'center' }}>
+        <div style={{ fontSize: 56 }}>📅</div>
+        <h1 style={{ fontSize: 28, margin: '10px 0 6px' }}>Connecte Google Agenda</h1>
         <p className="muted">Tu verras tout ton agenda ici et tu pourras créer, déplacer ou supprimer tes événements directement depuis QuestFlow.</p>
-        <button className="btn primary" onClick={connectGoogle}>Connecter mon compte Google</button>
+        <button className="btn primary" style={{ height: 36, padding: '0 16px' }} onClick={connectGoogle}>Connecter mon compte Google</button>
       </div>
     );
   }
@@ -165,31 +167,32 @@ export function AgendaView() {
   };
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '6px 28px 20px' }}>
+    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', padding: '10px 28px 16px' }}>
       <div className="row" style={{ marginBottom: 14 }}>
-        <h1 className="page-title" style={{ fontSize: 26 }}>Agenda</h1>
+        <span style={{ fontSize: 26 }}>{prefs.pages.agenda.emoji}</span>
+        <h1 style={{ fontSize: 26, fontWeight: 700, margin: 0 }}>{prefs.pages.agenda.title}</h1>
         <span className="muted" style={{ marginLeft: 8, fontWeight: 600 }}>{label}</span>
         {loading && <RefreshCw size={14} className="spin dim" />}
         <span className="grow" />
-        <button className="btn small icon" onClick={() => shift(-1)}><ChevronLeft size={16} /></button>
-        <button className="btn small" onClick={() => setWeek(mondayOf(new Date()))}>Aujourd'hui</button>
-        <button className="btn small icon" onClick={() => shift(1)}><ChevronRight size={16} /></button>
-        <button className="btn small" title="Actualiser" onClick={async () => { setLoading(true); const r = await api.calendarRefresh(); setLoading(false); if (!r?.ok) toast(`Agenda : ${r?.error}`, { icon: 'alert' }); }}><RefreshCw size={14} /></button>
-        <button className="btn small" onClick={() => api.openCalendarWeb()}><ExternalLink size={14} /> Google Agenda</button>
-        <button className="btn small primary" onClick={() => { const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); newAt(s, s.getHours()); }}><Plus size={14} /> Événement</button>
+        <button className="btn sm icon" onClick={() => shift(-1)}><ChevronLeft size={16} /></button>
+        <button className="btn sm" onClick={() => setWeek(mondayOf(new Date()))}>Aujourd'hui</button>
+        <button className="btn sm icon" onClick={() => shift(1)}><ChevronRight size={16} /></button>
+        <button className="btn sm" title="Actualiser" onClick={async () => { setLoading(true); const r = await api.calendarRefresh(); setLoading(false); if (!r?.ok) toast(`Agenda : ${r?.error}`, { icon: 'alert' }); }}><RefreshCw size={14} /></button>
+        <button className="btn sm" onClick={() => api.openCalendarWeb()}><ExternalLink size={14} /> Google Agenda</button>
+        <button className="btn sm primary" onClick={() => { const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); newAt(s, s.getHours()); }}><Plus size={14} /> Événement</button>
       </div>
-      <div className="panel" style={{ flex: 1, minHeight: 0, padding: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+      <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: '1px solid var(--border)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '56px repeat(7, 1fr)', borderBottom: '1px solid var(--border)' }}>
           <div />
           {days.map((d) => {
             const today = isSameDay(d, now);
             return (
               <div key={+d} style={{ padding: '10px 8px 8px', borderLeft: '1px solid var(--border)', textAlign: 'center' }}>
-                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: today ? '#67e8f9' : 'var(--dim)' }}>{d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '').toUpperCase()}</div>
-                <div style={{ fontFamily: 'var(--display)', fontSize: 22, fontWeight: 650, marginTop: 2, ...(today ? { width: 36, height: 36, lineHeight: '36px', margin: '2px auto 0', borderRadius: 12, background: 'linear-gradient(135deg,#22d3ee,#8b5cf6)', color: '#fff' } : {}) }}>{d.getDate()}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', color: today ? 'var(--accent)' : 'var(--text-3)' }}>{d.toLocaleDateString('fr-FR', { weekday: 'short' }).replace('.', '').toUpperCase()}</div>
+                <div style={{ fontSize: 22, fontWeight: 600, marginTop: 2, ...(today ? { width: 34, height: 34, lineHeight: '34px', margin: '2px auto 0', borderRadius: '50%', background: 'var(--accent)', color: '#fff' } : {}) }}>{d.getDate()}</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 6 }}>
                   {allDay.filter((e) => +new Date(e.start) < d.getTime() + 86400e3 && +new Date(e.end) > d.getTime()).map((e) => (
-                    <button key={e.id} onClick={() => setEditing(e)} style={{ fontSize: 11, fontWeight: 600, textAlign: 'left', padding: '3px 6px', borderRadius: 6, background: `${e.color || '#8b5cf6'}44`, border: `1px solid ${e.color || '#8b5cf6'}88`, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{e.title}</button>
+                    <button key={e.id} onClick={() => setEditing(e)} style={{ fontSize: 11, fontWeight: 600, textAlign: 'left', padding: '3px 6px', borderRadius: 6, background: `${e.color || '#2383e2'}2e`, borderLeft: `3px solid ${e.color || '#2383e2'}`, overflow: 'hidden', whiteSpace: 'nowrap', textOverflow: 'ellipsis' }}>{e.title}</button>
                   ))}
                 </div>
               </div>
@@ -209,7 +212,7 @@ export function AgendaView() {
               return (
                 <div
                   key={+d}
-                  style={{ position: 'relative', borderLeft: '1px solid var(--border)', background: today ? 'rgba(34,211,238,0.035)' : undefined, backgroundImage: `repeating-linear-gradient(to bottom, rgba(255,255,255,0.05) 0 1px, transparent 1px ${HOUR}px)` }}
+                  style={{ position: 'relative', borderLeft: '1px solid var(--border)', background: today ? 'var(--accent-soft)' : undefined, backgroundImage: `repeating-linear-gradient(to bottom, var(--border) 0 1px, transparent 1px ${HOUR}px)` }}
                   onDoubleClick={(e) => {
                     const y = e.clientY - e.currentTarget.getBoundingClientRect().top;
                     newAt(d, H0 + Math.floor((y / HOUR) * 2) / 2);
@@ -220,7 +223,7 @@ export function AgendaView() {
                     const en = new Date(e.end);
                     const top = Math.max(0, (s.getHours() + s.getMinutes() / 60 - H0) * HOUR);
                     const h = Math.max(22, ((en - s) / 3600e3) * HOUR - 3);
-                    const c = e.color || '#8b5cf6';
+                    const c = e.color || '#2383e2';
                     const past = en < now;
                     return (
                       <motion.button
@@ -233,8 +236,8 @@ export function AgendaView() {
                         style={{
                           position: 'absolute', top, height: h, left: `calc(${(e.col / e.cols) * 100}% + 3px)`, width: `calc(${100 / e.cols}% - 6px)`,
                           borderRadius: 9, padding: '4px 7px', textAlign: 'left', overflow: 'hidden',
-                          background: `linear-gradient(135deg, ${c}55, ${c}30)`, border: `1px solid ${c}aa`, borderLeft: `3px solid ${c}`,
-                          boxShadow: `0 6px 18px -10px ${c}`, fontSize: 11.5, lineHeight: 1.3,
+                          background: `${c}2b`, borderLeft: `3px solid ${c}`, color: 'var(--text)',
+                          fontSize: 12, lineHeight: 1.3,
                         }}
                       >
                         <div style={{ fontWeight: 650, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{e.title}</div>
@@ -244,8 +247,8 @@ export function AgendaView() {
                     );
                   })}
                   {today && now.getHours() >= H0 && now.getHours() < H1 && (
-                    <div style={{ position: 'absolute', left: 0, right: 0, top: (now.getHours() + now.getMinutes() / 60 - H0) * HOUR, height: 2, background: '#f43f5e', boxShadow: '0 0 10px #f43f5e', zIndex: 4 }}>
-                      <span style={{ position: 'absolute', left: -5, top: -4, width: 10, height: 10, borderRadius: '50%', background: '#f43f5e' }} />
+                    <div style={{ position: 'absolute', left: 0, right: 0, top: (now.getHours() + now.getMinutes() / 60 - H0) * HOUR, height: 2, background: 'var(--c-red)', zIndex: 4 }}>
+                      <span style={{ position: 'absolute', left: -5, top: -4, width: 10, height: 10, borderRadius: '50%', background: 'var(--c-red)' }} />
                     </div>
                   )}
                 </div>

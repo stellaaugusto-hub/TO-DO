@@ -617,7 +617,8 @@ const ICON_RULES = [
   ['users', /\b(reunion|meeting|rdv|point|equipe)\b/],
   ['check', /\b(valider|verifier|checker|check|relire|review)\b/],
 ];
-const COLOR_BY_TAG = { ads: 'violet', 'réseaux': 'pink', client: 'amber', finance: 'emerald', 'réunion': 'sky', design: 'fuchsia', 'vidéo': 'rose', web: 'cyan', reporting: 'indigo', email: 'blue', produit: 'orange', rh: 'lime' };
+// Couleurs de la palette Notion
+const COLOR_BY_TAG = { ads: 'purple', 'réseaux': 'pink', client: 'orange', finance: 'green', 'réunion': 'blue', design: 'pink', 'vidéo': 'red', web: 'blue', reporting: 'brown', email: 'blue', produit: 'orange', rh: 'green' };
 export function guessIcon(text) {
   const f = fold(text);
   const hit = ICON_RULES.find(([, re]) => re.test(f));
@@ -626,7 +627,7 @@ export function guessIcon(text) {
 export function guessColor(tags, priority) {
   if (priority === 1) return 'red';
   for (const t of tags) if (COLOR_BY_TAG[t]) return COLOR_BY_TAG[t];
-  return 'violet';
+  return 'default';
 }
 
 // ---------------------------------------------------------------------------

@@ -10,19 +10,19 @@ function demoState(params) {
   const fresh = params.get('fresh') === '1';
   const jean = { name: 'Jean Dupont', email: 'jean.dupont@exemple.fr' };
   const tasks = fresh ? [] : [
-    makeTask({ title: 'Ajouter des nouvelles ads sur Facebook, Instagram et TikTok', source: 'mail', sourceMeta: { from: jean, subject: 'Ads', url: '#' }, description: 'Salut, ajoute des nouvelles ads sur Facebook, Instagram et TikTok stp.', subtasks: [{ title: 'Facebook', done: true }, { title: 'Instagram' }, { title: 'TikTok' }], dueAt: h(0, 20), priority: 2, difficulty: 3, tags: ['ads', 'réseaux'], color: 'violet', icon: 'megaphone' }),
-    makeTask({ title: 'Corriger le prix sur la landing page', source: 'mail', sourceMeta: { from: { name: 'Paul Martin', email: 'paul@exemple.fr' }, subject: 'URGENT prix' }, dueAt: h(0, 15), priority: 1, difficulty: 2, tags: ['web'], color: 'red', icon: 'globe' }),
-    makeTask({ title: 'Relancer le fournisseur packaging', source: 'chat', sourceMeta: { from: { name: 'Léa' }, space: 'Équipe produit' }, dueAt: h(-1, 18), priority: 3, difficulty: 1, tags: ['produit'], color: 'orange', icon: 'truck' }),
-    makeTask({ title: 'Préparer la présentation des résultats de la campagne', source: 'mail', sourceMeta: { from: { name: 'Julie Bernard', email: 'julie@exemple.fr' }, subject: 'Résultats campagne' }, dueAt: h(3, 10), priority: 2, difficulty: 4, tags: ['reporting'], color: 'indigo', icon: 'presentation' }),
-    makeTask({ title: 'Appeler Marc pour le shooting', source: 'manual', dueAt: h(1, 10), priority: 3, difficulty: 1, tags: ['réunion'], color: 'sky', icon: 'phone' }),
-    makeTask({ title: 'Rédiger le brief créatif de Noël', source: 'manual', dueAt: h(2, 18), priority: 3, difficulty: 4, tags: ['design'], color: 'fuchsia', icon: 'pen' }),
-    makeTask({ title: 'Mettre à jour le reporting hebdo', source: 'chat', sourceMeta: { from: { name: 'Marc' }, space: 'Growth' }, dueAt: null, priority: 4, difficulty: 2, tags: ['reporting'], color: 'teal', icon: 'chart' }),
-    makeTask({ title: 'Donner mon avis à Joe : Plateforme de marque', source: 'mail', sourceMeta: { from: { name: 'Joe' }, subject: 'Plateforme de marque' }, dueAt: null, priority: 3, difficulty: 2, tags: [], color: 'pink', icon: 'sparkles' }),
-    makeTask({ title: 'Valider le devis Studio K', source: 'mail', status: 'done', completedAt: h(0, 9, 12), xpEarned: 25, priority: 3, difficulty: 1, tags: ['finance'], color: 'emerald', icon: 'receipt', sourceMeta: { from: { name: 'Compta' } } }),
-    makeTask({ title: 'Envoyer le récap au client', source: 'manual', status: 'done', completedAt: h(-1, 17, 40), xpEarned: 40, priority: 2, difficulty: 2, tags: ['client'], color: 'amber', icon: 'mail' }),
+    makeTask({ title: 'Ajouter des nouvelles ads sur Facebook, Instagram et TikTok', source: 'mail', sourceMeta: { from: jean, subject: 'Ads', url: '#' }, description: 'Salut, ajoute des nouvelles ads sur Facebook, Instagram et TikTok stp.', subtasks: [{ title: 'Facebook', done: true }, { title: 'Instagram' }, { title: 'TikTok' }], dueAt: h(0, 20), priority: 2, difficulty: 3, tags: ['ads', 'réseaux'], color: 'purple', icon: 'megaphone', emoji: '📣', stage: 'doing' }),
+    makeTask({ title: 'Corriger le prix sur la landing page', source: 'mail', sourceMeta: { from: { name: 'Paul Martin', email: 'paul@exemple.fr' }, subject: 'URGENT prix' }, dueAt: h(0, 15), priority: 1, difficulty: 2, tags: ['web'], color: 'red', icon: 'globe', emoji: '🌐' }),
+    makeTask({ title: 'Relancer le fournisseur packaging', source: 'chat', sourceMeta: { from: { name: 'Léa' }, space: 'Équipe produit' }, dueAt: h(-1, 18), priority: 3, difficulty: 1, tags: ['produit'], color: 'orange', icon: 'truck', emoji: '📦' }),
+    makeTask({ title: 'Préparer la présentation des résultats de la campagne', source: 'mail', sourceMeta: { from: { name: 'Julie Bernard', email: 'julie@exemple.fr' }, subject: 'Résultats campagne' }, dueAt: h(3, 10), priority: 2, difficulty: 4, tags: ['reporting'], color: 'blue', icon: 'presentation', emoji: '📊', stage: 'doing' }),
+    makeTask({ title: 'Appeler Marc pour le shooting', source: 'manual', dueAt: h(1, 10), priority: 3, difficulty: 1, tags: ['réunion'], color: 'default', icon: 'phone', emoji: '📞' }),
+    makeTask({ title: 'Rédiger le brief créatif de Noël', source: 'manual', dueAt: h(2, 18), priority: 3, difficulty: 4, tags: ['design'], color: 'pink', icon: 'pen', emoji: '✏️' }),
+    makeTask({ title: 'Mettre à jour le reporting hebdo', source: 'chat', sourceMeta: { from: { name: 'Marc' }, space: 'Growth' }, dueAt: null, priority: 4, difficulty: 2, tags: ['reporting'], color: 'brown', icon: 'chart', emoji: '📈' }),
+    makeTask({ title: 'Donner mon avis à Joe : Plateforme de marque', source: 'mail', sourceMeta: { from: { name: 'Joe' }, subject: 'Plateforme de marque' }, dueAt: null, priority: 3, difficulty: 2, tags: [], color: 'yellow', icon: 'sparkles', emoji: '💬', stage: 'waiting' }),
+    makeTask({ title: 'Valider le devis Studio K', source: 'mail', status: 'done', completedAt: h(0, 9, 12), xpEarned: 25, priority: 3, difficulty: 1, tags: ['finance'], color: 'green', icon: 'receipt', emoji: '🧾', sourceMeta: { from: { name: 'Compta' } } }),
+    makeTask({ title: 'Envoyer le récap au client', source: 'manual', status: 'done', completedAt: h(-1, 17, 40), xpEarned: 40, priority: 2, difficulty: 2, tags: ['client'], color: 'orange', icon: 'mail', emoji: '✉️' }),
   ];
   const events = fresh ? [] : [
-    ...[-3, -2, -1, 0, 1, 2, 3].map((d) => ({ id: 'd' + d, eventId: 'd' + d, calendarId: 'primary', title: 'Daily growth', start: h(d, 9, 30), end: h(d, 9, 50), calendar: 'Travail', color: '#0ea5e9', editable: true })),
+    ...[-3, -2, -1, 0, 1, 2, 3].map((d) => ({ id: 'd' + d, eventId: 'd' + d, calendarId: 'primary', title: 'Daily growth', start: h(d, 9, 30), end: h(d, 9, 50), calendar: 'Travail', color: '#337ea9', editable: true })),
     { id: 'e2', eventId: 'e2', calendarId: 'primary', title: 'Point ads avec Jean', start: h(0, 11), end: h(0, 11, 45), calendar: 'Travail', location: 'Google Meet', color: '#8b5cf6', editable: true },
     { id: 'e3', eventId: 'e3', calendarId: 'primary', title: 'Déjeuner équipe', start: h(0, 12, 30), end: h(0, 13, 30), calendar: 'Travail', color: '#f59e0b', editable: true },
     { id: 'e4', eventId: 'e4', calendarId: 'primary', title: 'Revue créas Noël', start: h(0, 16), end: h(0, 17), calendar: 'Travail', color: '#ec4899', editable: true },
@@ -33,7 +33,7 @@ function demoState(params) {
   ];
   return {
     profile: { name: fresh ? '' : 'Stella', createdAt: new Date().toISOString() },
-    settings: { notifications: true, notifyLeadMinutes: 60, morningDigest: true, digestHour: 9, sounds: false, autoSyncMinutes: 20, mailLookbackDays: 7, syncChat: true, showSyncWindows: false },
+    settings: { appearance: { theme: params.get('theme') || 'light', accent: params.get('accent') || 'blue', font: params.get('font') || 'default' }, tagColors: { ads: 'purple', 'réseaux': 'pink', web: 'blue', finance: 'green', reporting: 'brown', design: 'pink', produit: 'orange', client: 'orange', 'réunion': 'blue' }, notifications: true, notifyLeadMinutes: 60, morningDigest: true, digestHour: 9, sounds: false, autoSyncMinutes: 20, mailLookbackDays: 7, syncChat: true, showSyncWindows: false },
     tasks,
     events,
     stats: { xp: fresh ? 0 : 465, streak: fresh ? 0 : 6, bestStreak: 9, lastCompletionDay: fresh ? null : dayKey(new Date()), completedCount: 31, highScore: fresh ? 0 : 1840, gamesPlayed: 12 },

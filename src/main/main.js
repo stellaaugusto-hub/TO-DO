@@ -63,6 +63,7 @@ function updateBadge() {
 function createWindow() {
   const st = store.get();
   const bounds = st.window || {};
+  applyNativeTheme();
   win = new BrowserWindow({
     width: bounds.width || 1320,
     height: bounds.height || 860,
@@ -72,7 +73,7 @@ function createWindow() {
     minHeight: 660,
     show: false,
     title: 'QuestFlow',
-    backgroundColor: '#07071a',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#191919' : '#ffffff',
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 18, y: 20 },
     webPreferences: {
@@ -100,6 +101,13 @@ function createWindow() {
 
   if (process.env.VITE_DEV_SERVER_URL) win.loadURL(process.env.VITE_DEV_SERVER_URL);
   else win.loadFile(path.join(__dirname, '../../dist/index.html'));
+}
+
+/** Thème natif (barre de titre, menus, champs date) aligné sur le thème choisi dans l'app. */
+function applyNativeTheme() {
+  const t = store.get().settings.appearance?.theme || 'light';
+  nativeTheme.themeSource = t === 'system' ? 'system' : t;
+  if (win && !win.isDestroyed()) win.setBackgroundColor(nativeTheme.shouldUseDarkColors ? '#191919' : '#ffffff');
 }
 
 function buildMenu() {
@@ -217,6 +225,7 @@ function registerIpc() {
 
   ipcMain.handle('settings:set', (_e, patch) => {
     store.update((s) => { s.settings = { ...s.settings, ...patch }; });
+    if (patch.appearance) applyNativeTheme();
     if ('autoSyncMinutes' in patch) scheduleAutoSync();
     changed();
   });
@@ -390,7 +399,7 @@ app.whenReady().then(async () => {
   store = new Store(app.getPath('userData'));
   log = createLogger(path.join(app.getPath('userData'), 'logs'));
   log.info(`QuestFlow ${app.getVersion()} (${process.platform}/${process.arch}) démarre`);
-  nativeTheme.themeSource = 'dark';
+
   auth = new GoogleAuth({ store, log, bundled: { clientId: pkg.questflow?.googleClientId, clientSecret: pkg.questflow?.googleClientSecret } });
 
   updater = new Updater({ owner: pkg.questflow?.githubOwner, repo: pkg.questflow?.githubRepo || 'questflow', log });

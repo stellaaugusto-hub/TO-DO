@@ -23,6 +23,8 @@ export function makeTask(p = {}, now = new Date()) {
     subtasks: (p.subtasks || []).map((s) => ({ id: s.id || uid(), title: s.title, done: !!s.done })),
     color: p.color || guessColor(tags, priority),
     icon: p.icon || guessIcon(title + ' ' + tags.join(' ')),
+    emoji: p.emoji === undefined ? null : p.emoji,
+    stage: p.stage || 'todo',
     pinned: !!p.pinned,
     questDay: p.questDay || null,
     status: p.status || 'todo',

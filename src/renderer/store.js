@@ -14,6 +14,7 @@ export const useApp = create((set, get) => ({
   creating: false,
   pasteOpen: false,
   googleSetupOpen: false,
+  paletteOpen: false,
   sync: null, // { label, key, done: [], startedAt }
   success: null, // { task, reward }
   toasts: [],
@@ -30,6 +31,7 @@ export const useApp = create((set, get) => ({
   newTask: () => set({ creating: true, selectedId: null }),
   setPasteOpen: (pasteOpen) => set({ pasteOpen }),
   setGoogleSetupOpen: (googleSetupOpen) => set({ googleSetupOpen }),
+  setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
 
   /** Connexion Google : guide de configuration la première fois, sinon navigateur. */
   async connectGoogle() {
