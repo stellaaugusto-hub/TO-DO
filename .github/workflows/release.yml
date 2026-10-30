@@ -9,13 +9,19 @@ on:
     paths: ['package.json']
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "Mac GitHub à utiliser (si les Mac Apple Silicon sont saturés, choisir macos-15-intel)"
+        type: choice
+        default: macos-15
+        options: [macos-15, macos-15-intel, macos-14, macos-26]
 
 permissions:
   contents: write
 
 jobs:
   release:
-    runs-on: macos-15
+    runs-on: ${{ inputs.runner || 'macos-15' }}
     timeout-minutes: 60
     env:
       HAS_APPLE: ${{ secrets.APPLE_ID != '' }}
