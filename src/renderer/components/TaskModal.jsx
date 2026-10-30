@@ -224,7 +224,7 @@ export function TaskModal() {
             <div className="modal-foot">
               {existing ? (
                 <>
-                  <DeleteButton label={existing.title} onConfirm={() => { remove(existing); closeTask(); }} />
+                  <DeleteButton up label={existing.title} onConfirm={() => { remove(existing); closeTask(); }} />
                   <button
                     className="btn small"
                     title="Bloquer un créneau dans Google Agenda pour cette quête"

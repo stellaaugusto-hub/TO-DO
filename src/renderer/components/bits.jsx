@@ -98,7 +98,7 @@ export function CheckButton({ onDone, large = false, color }) {
 }
 
 /** Croix de suppression avec confirmation. */
-export function DeleteButton({ onConfirm, label = 'cette quête' }) {
+export function DeleteButton({ onConfirm, label = 'cette quête', up = false }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
   useEffect(() => {
@@ -114,7 +114,7 @@ export function DeleteButton({ onConfirm, label = 'cette quête' }) {
       </button>
       <AnimatePresence>
         {open && (
-          <motion.div className="confirm-pop" initial={{ opacity: 0, y: -6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.95 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
+          <motion.div className="confirm-pop" style={up ? { top: 'auto', bottom: 36, left: 0, right: 'auto' } : undefined} initial={{ opacity: 0, y: -6, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: -6, scale: 0.95 }} transition={{ type: 'spring', stiffness: 500, damping: 30 }}>
             <p>Supprimer <b>{label}</b> ? Cette action est définitive.</p>
             <div className="row" style={{ justifyContent: 'flex-end' }}>
               <button className="btn small" onClick={() => setOpen(false)}>Annuler</button>

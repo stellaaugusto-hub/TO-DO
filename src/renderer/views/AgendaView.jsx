@@ -106,7 +106,7 @@ function EventModal({ ev, onClose }) {
           </div>
         </div>
         <div className="modal-foot">
-          {!isNew && !readOnly && <DeleteButton label={title || 'cet événement'} onConfirm={remove} />}
+          {!isNew && !readOnly && <DeleteButton up label={title || 'cet événement'} onConfirm={remove} />}
           {ev.meet && <button className="btn small" onClick={() => api.openExternal(ev.meet)}><Video size={14} /> Rejoindre</button>}
           {ev.url && <button className="btn small" onClick={() => api.openExternal(ev.url)}><ExternalLink size={14} /> Google Agenda</button>}
           <span className="grow" />
