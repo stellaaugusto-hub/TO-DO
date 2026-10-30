@@ -36,9 +36,13 @@
     "zustand": "^5.0.16"
   },
   "questflow": {
-    "githubOwner": "<A_REMPLIR>",
-    "githubRepo": "questflow",
+    "githubOwner": "stellaaugusto-hub",
+    "githubRepo": "TO-DO",
     "googleClientId": "",
     "googleClientSecret": ""
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stellaaugusto-hub/TO-DO.git"
   }
 }
