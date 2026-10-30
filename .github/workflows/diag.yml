@@ -7,9 +7,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15-intel, macos-15, macos-14]
+        os: [macos-15-intel, macos-15]
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -22,15 +22,16 @@ jobs:
         run: |
           echo 0 > late.txt
           node server.mjs & sleep 2
-          node experiment.mjs
+          node macv12.mjs
           echo 0 > late.txt
-          SIGNALS=SIGTERM,SIGINT,SIGHUP,APPLEQUIT,SIGTERM_WAIT35 node signals.mjs
+          SIGNALS=SIGTERM,SIGINT node signals.mjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: diag-${{ matrix.os }}
           path: |
             shots/
-            results.json
+            v12.json
             signals.json
+            diag/
             requests.jsonl
