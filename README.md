@@ -24,6 +24,7 @@ Aucune clé API, aucun projet Google Cloud. QuestFlow passe par **Google Chrome*
 Détails :
 
 - **Profil Chrome à part**, rangé dans `~/Library/Application Support/QuestFlow/chrome-profile` : ton Chrome habituel, tes favoris et tes mots de passe ne sont pas touchés. « Déconnecter » efface ce profil.
+- **Compte professionnel (Google Workspace)** : Chrome range souvent la connexion dans un profil séparé pour l'organisation (« Profile 1 »). QuestFlow repère le profil qui porte ta session et lit celui-là.
 - La fenêtre de connexion est un Chrome normal, sans aucun pilotage : QuestFlow ne voit ni ne tape ton mot de passe.
 - Pour lire, QuestFlow utilise ce même Chrome, normal (pas de mode « headless »), avec sa fenêtre placée hors de l'écran : Google voit toujours le même navigateur. Une icône Chrome peut apparaître quelques secondes dans le Dock pendant la lecture.
 - Les cookies de ce profil sont chiffrés par Chrome comme d'habitude (trousseau macOS).

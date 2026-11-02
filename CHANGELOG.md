@@ -1,5 +1,11 @@
 # Journal des versions
 
+## 1.3.0
+- Comptes professionnels (Google Workspace) : quand Chrome range ta connexion dans un profil séparé pour ton organisation (« Profile 1 »), QuestFlow le suit au lieu de lire le profil vide. C'était la cause du message « La connexion n'a pas abouti ».
+- La connexion est détectée dans tous les profils de Chrome, la fenêtre se ferme toute seule comme prévu.
+- Si Chrome enregistre la connexion sans pouvoir la relire, QuestFlow change automatiquement de méthode de chiffrement et te demande de te reconnecter une seule fois.
+- Messages d'erreur plus précis, et détail technique enrichi (profils Chrome, règles imposées par l'entreprise), toujours sans adresse ni contenu.
+
 ## 1.2.0
 - Connexion Google qui reste enregistrée : plus besoin de retaper ton mot de passe.
 - La fenêtre de connexion se ferme proprement (comme ⌘Q) : Chrome enregistre bien ta session avant de quitter. Avant, il quittait en urgence et pouvait perdre les derniers cookies Google, ce qui faisait tomber la connexion.

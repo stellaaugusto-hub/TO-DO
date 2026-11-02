@@ -76,7 +76,8 @@ function chromeEnv() {
 // Options communes. La fenêtre de connexion et le Chrome de lecture sont le même
 // Chrome, normal (pas de mode headless), sur le même profil : Google voit toujours
 // le même navigateur, et les cookies sont chiffrés comme dans un Chrome habituel.
-export const COMMON_ARGS = ['--no-first-run', '--no-default-browser-check', '--disable-search-engine-choice-screen', '--profile-directory=Default'];
+export const COMMON_ARGS = ['--no-first-run', '--no-default-browser-check', '--disable-search-engine-choice-screen'];
+const PROFILE_RE = /^(Default|Profile \d+)$/;
 // Lecture : pas de fenêtre au démarrage, et les onglets restent actifs même cachés.
 export const READ_ARGS = ['--no-startup-window', '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling', '--mute-audio'];
 const testArgs = () => (process.env.QF_CHROME_EXTRA ? process.env.QF_CHROME_EXTRA.trim().split(/\s+(?=--)/) : []); // tests uniquement
@@ -281,9 +282,10 @@ export function onLoginPage() {
 // Session Chrome de QuestFlow
 // ---------------------------------------------------------------------------
 export class ChromeSession extends EventEmitter {
-  constructor({ dir, log, diagDir, idleMs = 40e3 }) {
+  constructor({ dir, log, diagDir, idleMs = 40e3, mockKeychain = false }) {
     super();
     this.dir = dir;
+    this.mockKeychain = mockKeychain;
     this.log = log;
     this.diagDir = diagDir;
     this.idleMs = idleMs;
@@ -297,15 +299,72 @@ export class ChromeSession extends EventEmitter {
     return !!findChrome();
   }
 
-  /** Un compte Google a-t-il déjà été connecté dans ce profil ? (lecture rapide, sans lancer Chrome) */
+  /**
+   * Profils Chrome de ce dossier (« Default », « Profile 1 »…) et ceux qui contiennent un
+   * cookie de session Google. Avec un compte professionnel (Google Workspace), Chrome
+   * déplace souvent la connexion dans un nouveau profil « Profile 1 » : il faut la suivre.
+   */
+  profiles() {
+    let names = [];
+    try { names = fs.readdirSync(this.dir).filter((d) => PROFILE_RE.test(d)); } catch { /* pas encore de profil */ }
+    let lastUsed = null;
+    try { lastUsed = JSON.parse(fs.readFileSync(path.join(this.dir, 'Local State'), 'utf8')).profile?.last_used || null; } catch { /* rien */ }
+    return names.map((name) => {
+      let session = false;
+      let mtime = 0;
+      for (const f of ['Network/Cookies', 'Cookies']) {
+        try {
+          const file = path.join(this.dir, name, f);
+          if (fs.readFileSync(file).includes('SAPISID')) {
+            session = true;
+            mtime = Math.max(mtime, fs.statSync(file).mtimeMs);
+          }
+        } catch { /* pas de cookies */ }
+      }
+      return { name, session, mtime, lastUsed: name === lastUsed };
+    });
+  }
+
+  /** Le profil qui porte la session Google (le plus récent), sinon « Default ». */
+  activeProfile() {
+    if (this.profileOverride && fs.existsSync(path.join(this.dir, this.profileOverride))) return this.profileOverride;
+    const withSession = this.profiles().filter((p) => p.session).sort((a, b) => b.mtime - a.mtime || b.lastUsed - a.lastUsed);
+    return withSession[0]?.name || 'Default';
+  }
+
+  /** Un compte Google a-t-il déjà été connecté dans un des profils ? (lecture rapide, sans lancer Chrome) */
   hasSession() {
-    for (const f of ['Default/Network/Cookies', 'Default/Cookies']) {
+    return this.profiles().some((p) => p.session);
+  }
+
+  /** Arguments propres à un lancement : profil choisi, trousseau. */
+  _profileArgs(profile) {
+    return [`--user-data-dir=${this.dir}`, `--profile-directory=${profile}`, ...COMMON_ARGS, ...(this.mockKeychain ? ['--use-mock-keychain'] : [])];
+  }
+
+  /**
+   * Règles Chrome imposées par une entreprise sur ce Mac (profils éphémères, cookies effacés
+   * à la fermeture, connexion restreinte…) : elles s'appliquent aussi au Chrome de QuestFlow.
+   */
+  policies() {
+    if (process.platform !== 'darwin') return {};
+    const files = ['/Library/Managed Preferences/com.google.Chrome.plist', path.join('/Library/Managed Preferences', os.userInfo().username, 'com.google.Chrome.plist')];
+    const keys = ['ForceEphemeralProfiles', 'DefaultCookiesSetting', 'ClearBrowsingDataOnExitList', 'CookiesSessionOnlyForUrls', 'BrowserSignin', 'ProfileSeparationSettings', 'ManagedAccountsSigninRestriction', 'RestrictSigninToPattern', 'IncognitoModeAvailability', 'RemoteDebuggingAllowed', 'BrowserAddPersonEnabled'];
+    const found = {};
+    for (const f of files) {
       try {
-        const buf = fs.readFileSync(path.join(this.dir, f));
-        if (buf.includes('SAPISID')) return true;
-      } catch { /* pas encore de profil */ }
+        const json = JSON.parse(execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', f], { encoding: 'utf8', timeout: 5000 }));
+        for (const k of keys) if (k in json) found[k] = json[k];
+      } catch { /* pas de règle */ }
     }
-    return false;
+    return found;
+  }
+
+  /** Résumé lisible des profils (sans adresse) : « Default, Profile 1 (géré) ». */
+  profileSummary() {
+    let cache = {};
+    try { cache = JSON.parse(fs.readFileSync(path.join(this.dir, 'Local State'), 'utf8')).profile?.info_cache || {}; } catch { /* rien */ }
+    return this.profiles().map((p) => `${p.name}${cache[p.name]?.is_managed || cache[p.name]?.hosted_domain ? ' (pro)' : ''}${p.session ? ' ✓' : ''}`).join(', ') || 'aucun';
   }
 
   // --- Chrome sans fenêtre ------------------------------------------------------
@@ -332,7 +391,8 @@ export class ChromeSession extends EventEmitter {
     if (!bin) throw new NoChromeError();
     fs.mkdirSync(this.dir, { recursive: true, mode: 0o700 });
     await this._freeProfile();
-    const args = [...testArgs(), '--remote-debugging-pipe', `--user-data-dir=${this.dir}`, ...COMMON_ARGS, ...READ_ARGS];
+    const profile = this.activeProfile();
+    const args = [...testArgs(), '--remote-debugging-pipe', ...this._profileArgs(profile), ...READ_ARGS];
     this.emit('launching');
     const proc = spawn(bin, args, { stdio: ['ignore', 'ignore', 'pipe', 'pipe', 'pipe'], env: chromeEnv() });
     const errTail = [];
@@ -340,11 +400,11 @@ export class ChromeSession extends EventEmitter {
     proc.stderr.on('data', (d) => { errTail.push(d); if (errTail.length > 30) errTail.shift(); });
     proc.on('error', (e) => this.log?.warn(`chrome: ${e.message}`));
     const cdp = new Cdp(proc.stdio[3], proc.stdio[4]);
-    this.browser = { proc, cdp };
+    this.browser = { proc, cdp, profile };
     proc.on('exit', () => { if (this.browser?.proc === proc) this.browser = null; cdp._close(); });
     try {
       const v = await cdp.send('Browser.getVersion', {}, undefined, 20e3);
-      this.log?.info(`chrome (lecture, sans fenêtre visible) : ${v.product}`);
+      this.log?.info(`chrome (lecture, sans fenêtre visible) : ${v.product} · profil ${profile}`);
       // Une fenêtre « support » posée hors de l'écran : les pages s'y ouvrent en onglets.
       const { targetId } = await cdp.send('Target.createTarget', { url: 'about:blank', newWindow: true, background: true, left: -32000, top: -32000, width: 1280, height: 900 });
       const win = await cdp.send('Browser.getWindowForTarget', { targetId }).catch(() => null);
@@ -412,19 +472,19 @@ export class ChromeSession extends EventEmitter {
         const cookies = await this.googleCookieNames();
         const landing = `${info.host || '?'}${info.path || ''}`;
         if (state !== 'ready') await this.diagnose(tab, state === 'login' ? 'connexion' : 'gmail');
-        return { ok: state === 'ready', state: state || 'timeout', email: info.email, title: info.title, landing, cookies };
+        return { ok: state === 'ready', state: state || 'timeout', email: info.email, title: info.title, landing, cookies, profile: this.browser?.profile };
       } finally {
         await tab.close();
       }
     });
   }
 
-  /** Efface les cookies de ce profil (session refusée par Google) pour repartir d'une connexion propre. */
-  async clearCookies() {
+  /** Session refusée par Google : on repart d'un profil Chrome neuf (ton Chrome habituel n'est pas touché). */
+  async resetProfile() {
     await this.queue;
     await this.closeBrowser();
     await this._freeProfile();
-    for (const f of ['Default/Network/Cookies', 'Default/Network/Cookies-journal', 'Default/Cookies', 'Default/Cookies-journal']) fs.rmSync(path.join(this.dir, f), { force: true });
+    fs.rmSync(this.dir, { recursive: true, force: true });
   }
 
   /** Ouvre une page Google dans un onglet sans fenêtre et vérifie qu'on est connecté. */
@@ -489,7 +549,7 @@ export class ChromeSession extends EventEmitter {
     await this._freeProfile();
     const hadSession = this.hasSession();
     const url = `https://accounts.google.com/ServiceLogin?hl=fr&continue=${encodeURIComponent('https://mail.google.com/mail/u/0/')}`;
-    const proc = spawn(bin, [...testArgs(), `--user-data-dir=${this.dir}`, ...COMMON_ARGS, '--window-size=1080,860', '--new-window', url], { stdio: 'ignore', env: chromeEnv() });
+    const proc = spawn(bin, [...testArgs(), ...this._profileArgs(this.activeProfile()), '--window-size=1080,860', '--new-window', url], { stdio: 'ignore', env: chromeEnv() });
     const v = { proc, kind: 'login', reason: null };
     this.visible = v;
     onPhase({ phase: 'waiting' });
@@ -547,7 +607,7 @@ export class ChromeSession extends EventEmitter {
     await this.closeBrowser();
     await this.endVisible();
     await this._freeProfile();
-    const proc = spawn(bin, [...testArgs(), '--remote-debugging-pipe', `--user-data-dir=${this.dir}`, ...COMMON_ARGS, '--window-size=1180,860', 'about:blank'], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], env: chromeEnv() });
+    const proc = spawn(bin, [...testArgs(), '--remote-debugging-pipe', ...this._profileArgs(this.activeProfile()), '--window-size=1180,860', 'about:blank'], { stdio: ['ignore', 'ignore', 'ignore', 'pipe', 'pipe'], env: chromeEnv() });
     const v = { proc, kind: 'assist', reason: null };
     this.visible = v;
     const cdp = new Cdp(proc.stdio[3], proc.stdio[4]);

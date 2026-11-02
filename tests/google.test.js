@@ -5,7 +5,10 @@ import { mentionsMe, cleanMention } from '../src/main/google/chat.js';
 import { eventsFromZip, templateUrl, assistUrl } from '../src/main/google/calendar.js';
 import { parseIcs, expandCalendar, zonedToUtc, calendarIdFromFile, parseLine } from '../src/main/google/ics.js';
 import { unzip } from '../src/main/google/zip.js';
-import { onLoginPage, COMMON_ARGS, READ_ARGS } from '../src/main/google/chrome.js';
+import { onLoginPage, COMMON_ARGS, READ_ARGS, ChromeSession } from '../src/main/google/chrome.js';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { extractTasks } from '../src/shared/extract.js';
 import { compareVersions } from '../src/shared/version.js';
 
@@ -80,6 +83,22 @@ describe('Google Chat (lu dans Chrome)', () => {
 });
 
 describe('Chrome', () => {
+  it('suit le profil où Chrome a rangé la connexion (compte pro -> « Profile 1 »)', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qf-prof-'));
+    const put = (p, content) => { fs.mkdirSync(path.join(dir, p, 'Network'), { recursive: true }); fs.writeFileSync(path.join(dir, p, 'Network', 'Cookies'), content); };
+    const s = new ChromeSession({ dir });
+    expect([s.hasSession(), s.activeProfile()]).toEqual([false, 'Default']);
+    put('Default', 'SQLite format 3 NID AEC');
+    put('Profile 1', 'SQLite format 3 SID SAPISID __Secure-1PSID');
+    fs.writeFileSync(path.join(dir, 'Local State'), JSON.stringify({ profile: { last_used: 'Profile 1', info_cache: { Default: {}, 'Profile 1': { hosted_domain: 'innerskin.fr' } } } }));
+    expect([s.hasSession(), s.activeProfile()]).toEqual([true, 'Profile 1']);
+    expect(s.profileSummary()).toBe('Default, Profile 1 (pro) ✓');
+    expect(s._profileArgs('Profile 1')).toContain('--profile-directory=Profile 1');
+    s.mockKeychain = true;
+    expect(s._profileArgs('Default')).toContain('--use-mock-keychain');
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   it('lecture avec un Chrome normal : ni mode headless, ni trousseau factice', () => {
     // Le mode headless s'annonce « HeadlessChrome » à Google, et un trousseau différent
     // entre la connexion et la lecture rend les cookies illisibles : la session tombe.

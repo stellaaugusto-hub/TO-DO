@@ -210,13 +210,56 @@ async function refreshCalendar(session) {
   return events;
 }
 
-/** Explication lisible d'une vérification de session ratée (pour l'écran d'erreur et les journaux). */
-function describeCheck(c) {
+// Réglages du Chrome de QuestFlow appris en route (profil qui porte la session, trousseau).
+const chromeModeFile = () => path.join(app.getPath('userData'), 'chrome-mode.json');
+function loadChromeMode() {
+  try { return JSON.parse(fs.readFileSync(chromeModeFile(), 'utf8')); } catch { return {}; }
+}
+function saveChromeMode(patch) {
+  const m = { ...loadChromeMode(), ...patch };
+  fs.writeFileSync(chromeModeFile(), JSON.stringify(m, null, 1));
+  chrome.mockKeychain = !!m.mockKeychain;
+  chrome.profileOverride = m.profile || null;
+}
+
+/** Détail technique (sans adresse ni contenu) affiché en cas d'échec et écrit dans les journaux. */
+function checkDetail(c) {
   const names = c.cookies || [];
-  const hasSid = names.some((n) => /^(SID|__Secure-1PSID|SAPISID)$/.test(n));
-  if (c.state === 'timeout') return { error: "Gmail n'a pas répondu à temps. Vérifie ta connexion internet puis réessaie.", detail: `page : ${c.landing}` };
-  if (!hasSid) return { error: "Chrome n'a pas gardé ta connexion Google. Reconnecte-toi : cette fois QuestFlow attend que tout soit bien enregistré.", detail: `page : ${c.landing} · cookies Google : ${names.length}` };
-  return { error: 'Google a demandé de confirmer ta connexion. Reconnecte-toi dans la fenêtre Chrome.', detail: `page : ${c.landing} · cookies Google : ${names.length} (${names.filter((n) => /SID|APISID/.test(n)).join(', ')})` };
+  const pol = chrome.policies();
+  const parts = [
+    `page : ${c.landing || '?'}`,
+    `profils : ${chrome.profileSummary()}`,
+    `lu avec : ${c.profile || '?'}`,
+    `cookies Google vus : ${names.length}${names.some((n) => /^(SID|__Secure-1PSID)$/.test(n)) ? '' : ' (sans SID)'}`,
+  ];
+  if (Object.keys(pol).length) parts.push(`règles Chrome : ${Object.entries(pol).map(([k, v]) => `${k}=${JSON.stringify(v)}`).join(', ')}`);
+  if (chrome.mockKeychain) parts.push('trousseau : QuestFlow');
+  return parts.join(' · ');
+}
+
+const hasSid = (c) => (c.cookies || []).some((n) => /^(SID|__Secure-1PSID|SAPISID)$/.test(n));
+
+/**
+ * Vérification après connexion, en essayant chaque profil Chrome qui porte une session
+ * (avec un compte pro, Chrome range souvent la connexion dans « Profile 1 »).
+ */
+async function verifyAfterLogin() {
+  let c = await chrome.checkSession();
+  log.info(`vérification : ${c.ok ? 'ok' : c.state} · ${checkDetail(c)}`);
+  if (c.ok) return c;
+  for (const p of chrome.profiles().filter((x) => x.session && x.name !== c.profile)) {
+    chrome.profileOverride = p.name;
+    await chrome.closeBrowser();
+    const c2 = await chrome.checkSession();
+    log.info(`vérification avec ${p.name} : ${c2.ok ? 'ok' : c2.state} · ${checkDetail(c2)}`);
+    if (c2.ok) {
+      saveChromeMode({ profile: p.name });
+      return c2;
+    }
+    c = c2;
+  }
+  chrome.profileOverride = loadChromeMode().profile || null;
+  return c;
 }
 
 function markConnected(c) {
@@ -251,14 +294,17 @@ async function connectGoogle() {
     if (chrome.hasSession()) {
       phase({ phase: 'checking' });
       const c = await chrome.checkSession().catch((e) => ({ ok: false, state: 'error', error: e.message, cookies: [] }));
-      log.info(`session existante : ${c.ok ? 'valide' : `${c.state} (${c.landing || c.error})`}`);
+      log.info(`session existante : ${c.ok ? 'valide' : `${c.state} · ${checkDetail(c)}`}`);
       if (c.ok) {
         markConnected(c);
         phase({ phase: 'done', email: c.email, already: true });
         return { connected: true, email: c.email };
       }
-      // Session refusée par Google : on efface ces cookies inutiles pour repartir d'une connexion propre.
-      if (c.state === 'login') await chrome.clearCookies();
+      // Session refusée par Google : on repart d'un profil Chrome neuf.
+      if (c.state === 'login') {
+        await chrome.resetProfile();
+        saveChromeMode({ profile: null });
+      }
     }
     phase({ phase: 'opening' });
     const reason = await chrome.login({ onPhase: phase });
@@ -268,18 +314,32 @@ async function connectGoogle() {
       return { connected: false, code: 'CANCELLED', error: 'annulée' };
     }
     phase({ phase: 'verifying' });
-    const c = await chrome.checkSession();
-    log.info(`vérification après connexion : ${c.ok ? 'ok' : c.state} · ${c.landing} · cookies google : ${(c.cookies || []).join(',')}`);
+    const c = await verifyAfterLogin();
     if (c.ok) {
       markConnected(c);
       phase({ phase: 'done', email: c.email });
       return { connected: true, email: c.email };
     }
-    const d = describeCheck(c);
-    store.update((s) => { s.google.connected = false; s.google.lastCheck = { at: new Date().toISOString(), ok: false, ...d, state: c.state, landing: c.landing, cookies: c.cookies }; });
+    const detail = checkDetail(c);
+    let error;
+    if (c.state === 'timeout') {
+      error = "Gmail n'a pas répondu à temps. Vérifie ta connexion internet puis réessaie.";
+    } else if (!chrome.hasSession()) {
+      error = "Je n'ai pas vu ta connexion se terminer dans Chrome. Réessaie et attends d'arriver sur ta boîte Gmail : QuestFlow fermera Chrome tout seul.";
+    } else if (!hasSid(c) && !chrome.mockKeychain) {
+      // Les cookies sont sur le disque mais Chrome ne les relit pas : on change de méthode de
+      // chiffrement pour le Chrome de QuestFlow (sans toucher au trousseau) et on repart à zéro.
+      saveChromeMode({ mockKeychain: true, profile: null });
+      await chrome.resetProfile();
+      error = "Chrome a enregistré ta connexion mais n'arrive pas à la relire. J'ai changé un réglage de QuestFlow : clique sur Réessayer et connecte-toi une dernière fois.";
+    } else {
+      error = 'Google a refusé la session enregistrée. Clique sur Réessayer et reconnecte-toi.';
+    }
+    log.warn(`connexion échouée : ${error} · ${detail}`);
+    store.update((s) => { s.google.connected = false; s.google.lastCheck = { at: new Date().toISOString(), ok: false, error, detail }; });
     changed();
-    phase({ phase: 'error', code: 'NOT_LOGGED_IN', error: d.error, detail: d.detail });
-    return { connected: false, code: 'NOT_LOGGED_IN', error: d.error };
+    phase({ phase: 'error', code: 'NOT_LOGGED_IN', error, detail });
+    return { connected: false, code: 'NOT_LOGGED_IN', error };
   } catch (e) {
     log.warn(`google connect: ${e.stack || e.message}`);
     focusWindow();
@@ -444,6 +504,7 @@ function registerIpc() {
   ipcMain.handle('google:cancelLogin', () => chrome.finishLogin('cancel'));
   ipcMain.handle('google:disconnect', async () => {
     await chrome.forget();
+    saveChromeMode({ profile: null });
     store.update((s) => { s.google = { ...s.google, connected: false, email: null, profile: null }; s.events = []; });
     changed();
   });
@@ -546,7 +607,9 @@ app.whenReady().then(async () => {
   log = createLogger(path.join(app.getPath('userData'), 'logs'));
   log.info(`QuestFlow ${app.getVersion()} (${process.platform}/${process.arch}) démarre`);
 
-  chrome = new ChromeSession({ dir: path.join(app.getPath('userData'), 'chrome-profile'), log, diagDir: path.join(app.getPath('userData'), 'logs') });
+  const mode = loadChromeMode();
+  chrome = new ChromeSession({ dir: path.join(app.getPath('userData'), 'chrome-profile'), log, diagDir: path.join(app.getPath('userData'), 'logs'), mockKeychain: !!mode.mockKeychain });
+  chrome.profileOverride = mode.profile || null;
   // Si QuestFlow était au premier plan, il le reste quand Chrome démarre en arrière-plan.
   let wasFocused = false;
   chrome.on('launching', () => { wasFocused = !!win && !win.isDestroyed() && win.isFocused(); });
