@@ -450,6 +450,39 @@ export class ChromeSession extends EventEmitter {
     return tab;
   }
 
+  /**
+   * Téléchargement déclenché par `trigger()` (ex. clic sur « Exporter ») : on le récupère
+   * dans un dossier temporaire. Renvoie { state, url, data }.
+   */
+  async download(trigger, { timeout = 60e3 } = {}) {
+    const { cdp } = this.browser;
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'questflow-dl-'));
+    let guid = null;
+    let url = null;
+    let onBegin;
+    let onProgress;
+    const finished = new Promise((resolve) => {
+      onBegin = (p) => { guid = p.guid; url = p.url; };
+      onProgress = (p) => { if (p.guid === guid && ['completed', 'canceled'].includes(p.state)) resolve(p.state); };
+      cdp.on('Browser.downloadWillBegin', onBegin);
+      cdp.on('Browser.downloadProgress', onProgress);
+    });
+    try {
+      await cdp.send('Browser.setDownloadBehavior', { behavior: 'allowAndName', downloadPath: dir, eventsEnabled: true });
+      const clicked = await trigger();
+      if (clicked === false) return { state: 'no-button', url: null, data: null };
+      const state = await Promise.race([finished, sleep(timeout).then(() => (guid ? 'timeout' : 'no-download'))]);
+      let data = null;
+      if (state === 'completed') try { data = fs.readFileSync(path.join(dir, guid)); } catch { /* fichier absent */ }
+      return { state, url, data };
+    } finally {
+      cdp.off('Browser.downloadWillBegin', onBegin);
+      cdp.off('Browser.downloadProgress', onProgress);
+      cdp.send('Browser.setDownloadBehavior', { behavior: 'default' }).catch(() => {});
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
   /** Noms des cookies Google présents (jamais leurs valeurs) : pour comprendre un échec de connexion. */
   async googleCookieNames() {
     try {

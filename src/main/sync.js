@@ -69,6 +69,7 @@ async function doSync({ store, chrome, log, onProgress = () => {}, sources = ['c
         });
         if (res.account?.email) email = res.account.email;
         result.mails = res.messages.length;
+        result.mailsVisible = res.scanned;
         messages.push(...res.messages);
         store.update((s) => {
           s.google.connected = true;
@@ -82,8 +83,10 @@ async function doSync({ store, chrome, log, onProgress = () => {}, sources = ['c
     if (sources.includes('calendar')) {
       progress('calendar', 'Lecture de ton agenda…');
       try {
-        const events = await listEvents(session, { ...calendarWindow(), me: me() });
+        const info = {};
+        const events = await listEvents(session, { ...calendarWindow(), me: me(), info, log });
         result.events = events.length;
+        result.calendarVia = info.via;
         store.update((s) => { s.events = events; s.google.connected = true; s.google.lastCalendarSync = new Date().toISOString(); });
       } catch (e) { handle('calendar', e); }
     }
@@ -123,6 +126,16 @@ async function doSync({ store, chrome, log, onProgress = () => {}, sources = ['c
     s.processed.chat = s.processed.chat.slice(-3000);
     s.google.lastSync = new Date().toISOString();
     s.google.lastError = Object.keys(result.errors).length ? result.errors : null;
+    s.google.lastReport = {
+      at: new Date().toISOString(),
+      mailsVisible: result.mailsVisible ?? null,
+      mails: sources.includes('mail') ? result.mails : null,
+      events: sources.includes('calendar') ? result.events : null,
+      calendarVia: result.calendarVia || null,
+      chats: sources.includes('chat') && st.settings.syncChat ? result.chats : null,
+      newTasks: result.newTasks.length,
+      errors: result.errors,
+    };
   });
   progress('done', 'Terminé !');
   log.info(`sync ok: ${result.newTasks.length} nouvelles tâches, ${result.events} événements, ${result.mails} mails, ${result.chats} messages chat`);

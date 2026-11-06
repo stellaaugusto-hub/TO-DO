@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 1.4.0
+- Google Agenda se lit à nouveau : l'export demande désormais un jeton que Google donne sur le bouton « Exporter » des paramètres. QuestFlow passe par ce bouton, comme toi. Si l'export n'est pas disponible, il lit les événements directement dans les pages « semaine » de Google Agenda.
+- Gmail : le message d'origine est lu par l'adresse « Télécharger le message » de Gmail (la plus fiable), puis « Afficher l'original » en secours.
+- Après chaque scan, QuestFlow affiche ce qu'il a lu (mails, événements) et, s'il y en a, les erreurs par source.
+- Agenda vide : un encadré explique pourquoi et propose « Lire mon agenda ».
+- Réglages → Google : « Dernier scan » (mails lus, événements et méthode utilisée) et « Copier le rapport » (diagnostic technique, sans le contenu de tes mails).
+
 ## 1.3.0
 - Comptes professionnels (Google Workspace) : quand Chrome range ta connexion dans un profil séparé pour ton organisation (« Profile 1 »), QuestFlow le suit au lieu de lire le profil vide. C'était la cause du message « La connexion n'a pas abouti ».
 - La connexion est détectée dans tous les profils de Chrome, la fenêtre se ferme toute seule comme prévu.

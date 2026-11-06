@@ -29,7 +29,7 @@ Détails :
 - Pour lire, QuestFlow utilise ce même Chrome, normal (pas de mode « headless »), avec sa fenêtre placée hors de l'écran : Google voit toujours le même navigateur. Une icône Chrome peut apparaître quelques secondes dans le Dock pendant la lecture.
 - Les cookies de ce profil sont chiffrés par Chrome comme d'habitude (trousseau macOS).
 - **Gmail** : boîte de réception (onglet Principal), lecture du message d'origine (« Afficher l'original »), sans marquer les mails comme lus.
-- **Google Agenda** : lecture via l'export officiel (Paramètres → Exporter) avec les récurrences ; création, renommage et suppression par les mêmes clics que toi. Si Google change son interface, Google Agenda s'ouvre sur la bonne page dans une fenêtre Chrome et se referme dès que tu as enregistré.
+- **Google Agenda** : lecture via l'export officiel (Paramètres → Exporter, en cliquant sur le bouton comme toi) avec les récurrences, ou à défaut via les pages « semaine » ; création, renommage et suppression par les mêmes clics que toi. Si Google change son interface, Google Agenda s'ouvre sur la bonne page dans une fenêtre Chrome et se referme dès que tu as enregistré.
 - **Google Chat (bêta)** : messages directs et mentions des derniers jours. Les conversations ouvertes par QuestFlow passent en « lu ».
 - Si la connexion échoue, la fenêtre affiche un « Détail technique » (page atteinte, nombre de cookies Google, jamais leur contenu) : une capture d'écran suffit pour comprendre.
 - Si l'interface de Google change, QuestFlow écrit un fichier `diagnostic-*.txt` dans ses journaux (Réglages → Mises à jour → Journal de diagnostic). Il ne contient que la structure de la page, jamais le contenu de tes mails.

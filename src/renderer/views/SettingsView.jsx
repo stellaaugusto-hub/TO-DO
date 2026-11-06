@@ -193,6 +193,14 @@ export function SettingsView() {
               <Row title="Google Chrome" sub={g.chrome ? 'Installé. QuestFlow l’ouvre en arrière-plan, sans fenêtre, le temps de lire, puis le referme.' : 'Introuvable : installe Google Chrome pour relier ton compte'}>
                 {g.chrome ? <span className="tag" style={{ background: 'var(--c-green-bg)', color: 'var(--c-green-tx)' }}>Prêt</span> : <button className="btn sm outline" onClick={() => api.openExternal('https://www.google.com/chrome/')}>Télécharger</button>}
               </Row>
+              {g.lastReport && (
+                <Row title="Dernier scan" sub={`${relative(g.lastReport.at)} · ${[g.lastReport.mails != null && `${g.lastReport.mails} mail(s) lu(s) sur ${g.lastReport.mailsVisible ?? '?'} visibles`, g.lastReport.events != null && `${g.lastReport.events} événement(s)${g.lastReport.calendarVia ? ` (${g.lastReport.calendarVia})` : ''}`, g.lastReport.chats != null && `${g.lastReport.chats} message(s) Chat`, `${g.lastReport.newTasks} nouvelle(s) quête(s)`].filter(Boolean).join(' · ')}`}>
+                  <span />
+                </Row>
+              )}
+              <Row title="Rapport de diagnostic" sub="Copie un rapport technique (sans le contenu de tes mails) à m'envoyer si quelque chose ne marche pas">
+                <button className="btn sm outline" onClick={async () => { const t = await api.googleReport(); try { await navigator.clipboard.writeText(t); toast('Rapport copié : colle-le dans ton message', { icon: 'check' }); } catch { toast('Copie impossible', { icon: 'alert' }); } }}>Copier le rapport</button>
+              </Row>
               {g.connected && (
                 <Row title="Tester la lecture" sub={test ? (test.ok ? [`Gmail : ${test.mails ?? '—'} fil(s) visibles`, `Agenda : ${test.events ?? '—'} événement(s)`, s.syncChat ? `Chat : ${test.chats ?? '—'} conversation(s)` : null, ...Object.entries(test.errors || {}).map(([k, v]) => `⚠️ ${k} : ${v}`)].filter(Boolean).join(' · ') : `⚠️ ${test.error}`) : 'Vérifie que Gmail, Agenda et Chat se lisent bien (≈ 20 s)'}>
                   <button className="btn sm outline" disabled={testing} onClick={async () => { setTesting(true); setTest(null); setTest(await api.googleTest()); setTesting(false); }}>{testing ? 'Test en cours…' : 'Tester'}</button>

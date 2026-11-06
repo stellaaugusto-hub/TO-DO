@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import zlib from 'node:zlib';
 import { parseRaw, parseAtom, idTime, rowToMessage } from '../src/main/google/gmail.js';
 import { mentionsMe, cleanMention } from '../src/main/google/chat.js';
-import { eventsFromZip, templateUrl, assistUrl } from '../src/main/google/calendar.js';
+import { eventsFromZip, templateUrl, assistUrl, parseChipText, eventsFromChips, textShape } from '../src/main/google/calendar.js';
 import { parseIcs, expandCalendar, zonedToUtc, calendarIdFromFile, parseLine } from '../src/main/google/ics.js';
 import { unzip } from '../src/main/google/zip.js';
 import { onLoginPage, COMMON_ARGS, READ_ARGS, ChromeSession } from '../src/main/google/chrome.js';
@@ -239,6 +239,35 @@ describe('Google Agenda (export .ics)', () => {
     expect(u.origin + u.pathname).toBe('https://calendar.google.com/calendar/render');
     expect(Object.fromEntries([...u.searchParams].filter(([k]) => k !== 'ctz'))).toEqual({ action: 'TEMPLATE', text: 'Quête : brief', dates: '20261030T090000Z/20261030T103000Z', details: 'Créé par QuestFlow' });
     expect(assistUrl('delete', { start: '2026-10-30T09:00:00.000Z' }, 'ZWlk')).toBe('https://calendar.google.com/calendar/u/0/r/eventedit/ZWlk');
+  });
+});
+
+describe('Google Agenda (pages semaine, secours)', () => {
+  const ref = new Date(2026, 10, 6, 8);
+  const local = (iso) => { const d = new Date(iso); return [d.getMonth() + 1, d.getDate(), d.getHours(), d.getMinutes()]; };
+  it('texte français : heure, titre, date', () => {
+    const e = parseChipText({ sr: '10:00 à 11:30, Point créa, Stella Augusto, Accepté, Studio, 6 novembre 2026', visible: 'Point créa\n10:00 – 11:30' }, ref);
+    expect(e.title).toBe('Point créa');
+    expect([local(e.start), local(e.end), e.allDay]).toEqual([[11, 6, 10, 0], [11, 6, 11, 30], false]);
+  });
+  it('texte anglais avec am/pm et journée entière', () => {
+    const e = parseChipText({ sr: '2pm to 3:15pm, Budget review, Accepted, No location, November 9, 2026', visible: '' }, ref);
+    expect([e.title, local(e.start), local(e.end)]).toEqual(['Budget review', [11, 9, 14, 0], [11, 9, 15, 15]]);
+    const a = parseChipText({ sr: 'Toute la journée, Shooting produit, 10 novembre 2026', visible: 'Shooting produit' }, ref);
+    expect([a.title, a.allDay, local(a.start)]).toEqual(['Shooting produit', true, [11, 10, 0, 0]]);
+  });
+  it('identifiant Google décodé, doublons retirés, hors période ignoré', () => {
+    const eid = Buffer.from('abc123_20261106T090000Z stella.augusto@innerskin.fr').toString('base64').replace(/=+$/, '');
+    const chips = [
+      { eid, sr: '10:00 à 11:00, Daily, 6 novembre 2026', visible: 'Daily' },
+      { eid, sr: '10:00 à 11:00, Daily, 6 novembre 2026', visible: 'Daily' },
+      { eid: 'eHl6IHg=', sr: '10:00 à 11:00, Vieux, 6 janvier 2026', visible: 'Vieux' },
+    ];
+    const evs = eventsFromChips(chips, { from: new Date(2026, 10, 1), to: new Date(2026, 11, 31) });
+    expect(evs.map((e) => [e.title, e.eventId, e.calendarId, e.recurring])).toEqual([['Daily', 'abc123_20261106T090000Z', 'stella.augusto@innerskin.fr', true]]);
+  });
+  it('journal : la forme du texte, sans son contenu', () => {
+    expect(textShape('10:00 à 11:00, Rendez-vous secret, 6 novembre 2026')).toBe('10:00 à 11:00, x x, 6 novembre 2026');
   });
 });
 

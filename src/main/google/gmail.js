@@ -117,7 +117,14 @@ export async function gmailRawInPage(hexId) {
     if (e[0] === '#') return String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : +e.slice(1));
     return { lt: '<', gt: '>', amp: '&', quot: '"', apos: "'", nbsp: ' ' }[e.toLowerCase()];
   });
-  const tries = [`${base}?ik=${ik}&view=om&permmsgid=msg-f:${dec}`, `${base}?ik=${ik}&view=om&th=${hexId}`, `${base}?ik=${ik}&view=att&th=${hexId}&attid=0&disp=comp&safe=1&zw`];
+  // Mêmes adresses que « Télécharger le message » de Gmail (celles qu'utilise la bibliothèque gmail.js),
+  // puis « Afficher l'original ».
+  const tries = [
+    `${base}?view=att&th=${hexId}&attid=0&disp=comp&safe=1&zw`,
+    `${base}?view=att&permmsgid=msg-f:${dec}&attid=0&disp=comp&safe=1&zw`,
+    `${base}?ik=${ik}&view=om&permmsgid=msg-f:${dec}`,
+    `${base}?ik=${ik}&view=om&th=${hexId}`,
+  ];
   for (const u of tries) {
     try {
       const r = await fetch(u, { credentials: 'include' });

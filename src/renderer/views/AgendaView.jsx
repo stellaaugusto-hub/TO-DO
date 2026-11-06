@@ -181,6 +181,15 @@ export function AgendaView() {
         <button className="btn sm" onClick={() => api.openCalendarWeb()}><ExternalLink size={14} /> Google Agenda</button>
         <button className="btn sm primary" onClick={() => { const s = new Date(); s.setMinutes(0, 0, 0); s.setHours(s.getHours() + 1); newAt(s, s.getHours()); }}><Plus size={14} /> Événement</button>
       </div>
+      {!(data.events || []).length && (
+        <div className="callout" style={{ margin: '0 0 12px', alignItems: 'center' }}>
+          <span className="emoji">{data.google.lastError?.calendar ? '⚠️' : '📅'}</span>
+          <div style={{ flex: 1, fontSize: 13.5 }}>
+            {data.google.lastError?.calendar ? <>Ton agenda n'a pas pu être lu : {data.google.lastError.calendar}</> : loading ? 'Lecture de ton Google Agenda…' : "Aucun événement chargé pour l'instant."}
+          </div>
+          <button className="btn sm outline" disabled={loading} onClick={async () => { setLoading(true); const r = await api.calendarRefresh(); setLoading(false); toast(r?.ok ? 'Agenda actualisé' : `Agenda : ${r?.error}`, { icon: r?.ok ? 'check' : 'alert', ms: 7000 }); }}><RefreshCw size={14} /> Lire mon agenda</button>
+        </div>
+      )}
       <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', borderTop: '1px solid var(--border)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '56px repeat(7, 1fr)', borderBottom: '1px solid var(--border)' }}>
           <div />

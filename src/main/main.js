@@ -192,7 +192,7 @@ async function doSync(sources, { background = false } = {}) {
       notif.on('click', focusWindow);
       notif.show();
     }
-    return { ok: true, newTasks: result.newTasks.map((t) => t.id), events: result.events, errors: result.errors };
+    return { ok: true, newTasks: result.newTasks.map((t) => t.id), events: result.events, mails: result.mails, mailsVisible: result.mailsVisible, chats: result.chats, calendarVia: result.calendarVia, errors: result.errors };
   } catch (e) {
     log.error(`sync: ${e.stack || e.message}`);
     store.update((s) => { s.google.lastError = e.message; });
@@ -204,7 +204,8 @@ async function doSync(sources, { background = false } = {}) {
 /** Liste des événements de la fenêtre courante, relue depuis Google Agenda. */
 async function refreshCalendar(session) {
   const st = store.get();
-  const events = await listEvents(session, { ...calendarWindow(), me: [st.google.email].filter(Boolean) });
+  const info = {};
+  const events = await listEvents(session, { ...calendarWindow(), me: [st.google.email].filter(Boolean), info, log });
   store.update((s) => { s.events = events; s.google.lastCalendarSync = new Date().toISOString(); });
   changed();
   return events;
@@ -274,7 +275,33 @@ function markConnected(c) {
   changed();
   // nom affiché et agenda, en arrière-plan
   fetchProfile(chrome).then((account) => { if (account?.name) { store.update((s) => { s.google.profile = { ...(s.google.profile || {}), ...account }; }); changed(); } }).catch(() => {});
-  chrome.run((session) => refreshCalendar(session)).catch((e) => log.warn(`agenda: ${e.message}`));
+  chrome.run((session) => refreshCalendar(session)).catch((e) => {
+    log.warn(`agenda: ${e.message}`);
+    store.update((s) => { s.google.lastError = { ...(typeof s.google.lastError === 'object' && s.google.lastError ? s.google.lastError : {}), calendar: e.message }; });
+    changed();
+  });
+}
+
+/** Rapport de diagnostic à copier (versions, profils, derniers résultats, journal Google) : sans contenu de mails. */
+function diagnosticReport() {
+  const st = store.get();
+  const g = st.google;
+  let logTail = [];
+  try {
+    logTail = fs.readFileSync(log.file, 'utf8').split('\n').filter((l) => /gmail|agenda|chat|sync|chrome|vérification|session|connexion|diagnostic/i.test(l)).slice(-45);
+  } catch { /* pas de journal */ }
+  const rep = g.lastReport || {};
+  return [
+    `QuestFlow ${app.getVersion()} · macOS ${process.getSystemVersion?.() || '?'} · ${process.arch}`,
+    `Google : ${g.connected ? 'connecté' : 'non connecté'} · méthode ${g.method || '?'} · ${chrome.mockKeychain ? 'trousseau QuestFlow' : 'trousseau macOS'}`,
+    `Profils Chrome : ${chrome.profileSummary()} · profil lu : ${chrome.activeProfile()}`,
+    `Règles Chrome : ${JSON.stringify(chrome.policies())}`,
+    `Dernier scan : ${rep.at || 'jamais'} · mails visibles ${rep.mailsVisible ?? '—'} · mails lus ${rep.mails ?? '—'} · événements ${rep.events ?? '—'} (${rep.calendarVia || '—'}) · chat ${rep.chats ?? '—'} · nouvelles quêtes ${rep.newTasks ?? '—'}`,
+    `Erreurs : ${JSON.stringify(g.lastError || rep.errors || null)}`,
+    `Événements en mémoire : ${st.events.length} · quêtes : ${st.tasks.length}`,
+    '--- journal ---',
+    ...logTail.map((l) => l.replace(/[\w.+-]+@[\w-]+(\.[\w-]+)+/g, '<adresse>')),
+  ].join('\n');
 }
 
 /**
@@ -509,6 +536,7 @@ function registerIpc() {
     changed();
   });
   ipcMain.handle('google:status', () => store.get().google.connected);
+  ipcMain.handle('google:report', () => diagnosticReport());
 
   /** « Tester la lecture » : un passage complet, sans créer de quêtes. */
   ipcMain.handle('google:test', async () => {
@@ -540,9 +568,13 @@ function registerIpc() {
   // --- Agenda : lecture et actions directes sur Google Agenda ----------------------
   ipcMain.handle('calendar:refresh', async () => {
     try {
-      await chrome.run((session) => refreshCalendar(session));
-      return { ok: true };
+      const events = await chrome.run((session) => refreshCalendar(session));
+      store.update((s) => { if (s.google.lastError && typeof s.google.lastError === 'object') { delete s.google.lastError.calendar; if (!Object.keys(s.google.lastError).length) s.google.lastError = null; } });
+      changed();
+      return { ok: true, events: events.length };
     } catch (e) {
+      store.update((s) => { s.google.lastError = { ...(typeof s.google.lastError === 'object' && s.google.lastError ? s.google.lastError : {}), calendar: e.message }; });
+      changed();
       if (e.code === 'NOT_LOGGED_IN') { store.update((s) => { s.google.connected = false; }); changed(); }
       return { ok: false, code: e.code, error: e.message };
     }
@@ -553,7 +585,7 @@ function registerIpc() {
     const w = calendarWindow();
     if (f >= w.from && t <= w.to) return { ok: true, events: store.get().events.filter((e) => e.end > f.toISOString() && e.start < t.toISOString()) };
     try {
-      const events = await chrome.run((session) => listEvents(session, { from: f, to: t, me: [store.get().google.email].filter(Boolean) }));
+      const events = await chrome.run((session) => listEvents(session, { from: f, to: t, me: [store.get().google.email].filter(Boolean), log }));
       return { ok: true, events };
     } catch (e) { return { ok: false, error: e.message, code: e.code }; }
   });

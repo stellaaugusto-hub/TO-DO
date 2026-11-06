@@ -21,7 +21,7 @@ function demoState(params) {
     makeTask({ title: 'Valider le devis Studio K', source: 'mail', status: 'done', completedAt: h(0, 9, 12), xpEarned: 25, priority: 3, difficulty: 1, tags: ['finance'], color: 'green', icon: 'receipt', emoji: '🧾', sourceMeta: { from: { name: 'Compta' } } }),
     makeTask({ title: 'Envoyer le récap au client', source: 'manual', status: 'done', completedAt: h(-1, 17, 40), xpEarned: 40, priority: 2, difficulty: 2, tags: ['client'], color: 'orange', icon: 'mail', emoji: '✉️' }),
   ];
-  const events = fresh ? [] : [
+  const events = fresh || params.get('noevents') ? [] : [
     ...[-3, -2, -1, 0, 1, 2, 3].map((d) => ({ id: 'd' + d, eventId: 'd' + d, calendarId: 'primary', title: 'Daily growth', start: h(d, 9, 30), end: h(d, 9, 50), calendar: 'Travail', color: '#337ea9', editable: true })),
     { id: 'e2', eventId: 'e2', calendarId: 'primary', title: 'Point ads avec Jean', start: h(0, 11), end: h(0, 11, 45), calendar: 'Travail', location: 'Google Meet', color: '#8b5cf6', editable: true },
     { id: 'e3', eventId: 'e3', calendarId: 'primary', title: 'Déjeuner équipe', start: h(0, 12, 30), end: h(0, 13, 30), calendar: 'Travail', color: '#f59e0b', editable: true },
@@ -37,7 +37,7 @@ function demoState(params) {
     tasks,
     events,
     stats: { xp: fresh ? 0 : 465, streak: fresh ? 0 : 6, bestStreak: 9, lastCompletionDay: fresh ? null : dayKey(new Date()), completedCount: 31, highScore: fresh ? 0 : 1840, gamesPlayed: 12 },
-    google: { connected: !fresh, chrome: params.get('nochrome') !== '1', method: 'chrome', email: 'stella@exemple.fr', lastSync: h(0, 9, 5) },
+    google: { connected: !fresh, chrome: params.get('nochrome') !== '1', method: 'chrome', email: 'stella@exemple.fr', lastSync: h(0, 9, 5), lastError: params.get('noevents') ? { calendar: "l'export de Google Agenda n'a pas répondu" } : null, lastReport: fresh ? null : { at: h(0, 9, 5), mailsVisible: 48, mails: 21, events: 14, calendarVia: 'export (bouton)', chats: 6, newTasks: 3, errors: {} } },
     app: { version: '1.0.0', platform: 'darwin', packaged: false },
   };
 }
@@ -106,6 +106,7 @@ export function createMockApi() {
     },
     async googleFinishLogin() { loginEnd?.('done'); },
     async googleCancelLogin() { loginEnd?.('cancel'); },
+    async googleReport() { return 'QuestFlow (démo) · rapport de diagnostic'; },
     async googleTest() { await wait(1500); return { ok: true, mails: 42, events: state.events.length, chats: 6, errors: {} }; },
     onGoogleLogin: sub('login'),
     onCalendarAssist: sub('assist'),

@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld('api', {
   googleFinishLogin: () => ipcRenderer.invoke('google:finishLogin'),
   googleCancelLogin: () => ipcRenderer.invoke('google:cancelLogin'),
   googleTest: () => ipcRenderer.invoke('google:test'),
+  googleReport: () => ipcRenderer.invoke('google:report'),
   onGoogleLogin: on('google:login'),
   onCalendarAssist: on('calendar:assist'),
   googleDisconnect: () => ipcRenderer.invoke('google:disconnect'),
