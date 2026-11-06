@@ -1,5 +1,12 @@
 # Journal des versions
 
+## 1.7.0
+- Slack des agences (Roads, Datashake…) : les notifications Slack reçues par mail (mentions, messages directs, récaps quotidiens) sont découpées message par message et les demandes deviennent des quêtes, sans clé API Slack.
+- Ces notifications sont trouvées même si Gmail les range dans l'onglet « Notifications » (recherche dédiée).
+- Les quêtes Slack portent la source « Slack », le tag de l'agence (#roads, #datashake) et arrivent dans la To-do Ads.
+- Réglages → Google : interrupteur « Slack des agences » et astuce pour recevoir les notifications Slack par mail toutes les 15 minutes.
+- Filtre et recherche : « source:slack ».
+
 ## 1.6.0
 - Fils de discussion lus en entier : le premier message (la demande d'origine), le dernier, et les messages intermédiaires retrouvés dans l'historique cité. Avant, seul le dernier message était lu, souvent ta propre réponse ou ta réaction ♥️, et la demande passait à la trappe.
 - Mails qui répartissent les tâches avec « @Prénom Nom <adresse> peux-tu… » : seules les demandes qui te sont adressées sont gardées (pas celles de Lara, Sarah…), même quand la phrase est coupée sur deux lignes.

@@ -89,7 +89,7 @@ export const useApp = create((set, get) => ({
     set({ sync: null, tab: prevTab === 'agenda' || prevTab === 'settings' ? 'todo' : prevTab, highlight: res?.newTasks || [] });
     if (res?.ok) {
       const n = res.newTasks.length;
-      const read = [res.mails != null && `${res.mails} mail${res.mails > 1 ? 's' : ''} lu${res.mails > 1 ? 's' : ''}`, res.events != null && `${res.events} événement${res.events > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
+      const read = [res.mails != null && `${res.mails} mail${res.mails > 1 ? 's' : ''} lu${res.mails > 1 ? 's' : ''}`, res.slack ? `${res.slack} message${res.slack > 1 ? 's' : ''} Slack` : null, res.events != null && `${res.events} événement${res.events > 1 ? 's' : ''}`].filter(Boolean).join(' · ');
       get().toast(`${n ? `${n} nouvelle${n > 1 ? 's' : ''} quête${n > 1 ? 's' : ''}` : 'Aucune nouvelle mission'}${read ? ` (${read})` : ''}`, { icon: n ? 'sparkles' : 'check', ms: 5000 });
       const errs = Object.entries(res.errors || {});
       if (errs.length) setTimeout(() => get().toast(`Lecture incomplète : ${errs.map(([k, v]) => `${{ mail: 'Gmail', calendar: 'Agenda', chat: 'Chat' }[k] || k} : ${v}`).join(' · ')}`, { icon: 'alert', ms: 9000 }), 600);

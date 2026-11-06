@@ -30,6 +30,7 @@ Détails :
 - Les cookies de ce profil sont chiffrés par Chrome comme d'habitude (trousseau macOS).
 - **Gmail** : boîte de réception (onglet Principal), lecture du message d'origine (« Afficher l'original »), sans marquer les mails comme lus.
 - **Google Agenda** : lecture via l'export officiel (Paramètres → Exporter, en cliquant sur le bouton comme toi) avec les récurrences, ou à défaut via les pages « semaine » ; création, renommage et suppression par les mêmes clics que toi. Si Google change son interface, Google Agenda s'ouvre sur la bonne page dans une fenêtre Chrome et se referme dès que tu as enregistré.
+- **Slack des agences** : les notifications Slack reçues par mail (mentions, messages directs, récaps) sont lues message par message. Pour ne rien rater : dans Slack, Préférences → Notifications → notifications par e-mail toutes les 15 minutes.
 - **Google Chat (bêta)** : messages directs et mentions des derniers jours. Les conversations ouvertes par QuestFlow passent en « lu ».
 - Si la connexion échoue, la fenêtre affiche un « Détail technique » (page atteinte, nombre de cookies Google, jamais leur contenu) : une capture d'écran suffit pour comprendre.
 - Si l'interface de Google change, QuestFlow écrit un fichier `diagnostic-*.txt` dans ses journaux (Réglages → Mises à jour → Journal de diagnostic). Il ne contient que la structure de la page, jamais le contenu de tes mails.

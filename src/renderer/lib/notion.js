@@ -27,6 +27,7 @@ export const PRIORITY_TAG = {
 export const SOURCE_TAG = {
   mail: { label: 'Mail', color: 'blue' },
   chat: { label: 'Chat', color: 'green' },
+  slack: { label: 'Slack', color: 'pink' },
   manual: { label: 'Perso', color: 'yellow' },
   calendar: { label: 'Agenda', color: 'purple' },
 };

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, MessageCircle, PenLine, Calendar, Check, Clock } from 'lucide-react';
+import { Mail, MessageCircle, PenLine, Calendar, Check, Clock, Hash } from 'lucide-react';
 import { tagStyle, textColor, STAGES, stageOf, PRIORITY_TAG, SOURCE_TAG, DIFF_COLORS, taskEmoji } from '../lib/notion.js';
 import { iconFor } from '../lib/icons.js';
 import { DIFFICULTY } from '../../shared/priority.js';
@@ -30,7 +30,7 @@ export function PriorityTag({ priority = 3 }) {
   return <Tag color={p.color}>{p.label}</Tag>;
 }
 
-const SRC_ICON = { mail: Mail, chat: MessageCircle, manual: PenLine, calendar: Calendar };
+const SRC_ICON = { mail: Mail, chat: MessageCircle, slack: Hash, manual: PenLine, calendar: Calendar };
 /** Libellé de provenance (distinct de l'icône de la tâche) : enveloppe = mail, crayon = créée par moi. */
 export function SourceTag({ source = 'manual' }) {
   const s = SOURCE_TAG[source] || SOURCE_TAG.manual;

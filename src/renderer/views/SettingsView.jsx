@@ -194,7 +194,7 @@ export function SettingsView() {
                 {g.chrome ? <span className="tag" style={{ background: 'var(--c-green-bg)', color: 'var(--c-green-tx)' }}>Prêt</span> : <button className="btn sm outline" onClick={() => api.openExternal('https://www.google.com/chrome/')}>Télécharger</button>}
               </Row>
               {g.lastReport && (
-                <Row title="Dernier scan" sub={`${relative(g.lastReport.at)} · ${[g.lastReport.mails != null && `${g.lastReport.mails} mail(s) lu(s) sur ${g.lastReport.mailsVisible ?? '?'} visibles`, g.lastReport.events != null && `${g.lastReport.events} événement(s)${g.lastReport.calendarVia ? ` (${g.lastReport.calendarVia})` : ''}`, g.lastReport.chats != null && `${g.lastReport.chats} message(s) Chat`, `${g.lastReport.newTasks} nouvelle(s) quête(s)`].filter(Boolean).join(' · ')}`}>
+                <Row title="Dernier scan" sub={`${relative(g.lastReport.at)} · ${[g.lastReport.mails != null && `${g.lastReport.mails} mail(s) lu(s) sur ${g.lastReport.mailsVisible ?? '?'} visibles`, g.lastReport.events != null && `${g.lastReport.events} événement(s)${g.lastReport.calendarVia ? ` (${g.lastReport.calendarVia})` : ''}`, g.lastReport.chats != null && `${g.lastReport.chats} message(s) Chat`, g.lastReport.slack != null && `${g.lastReport.slack} message(s) Slack`, `${g.lastReport.newTasks} nouvelle(s) quête(s)`].filter(Boolean).join(' · ')}`}>
                   <span />
                 </Row>
               )}
@@ -216,6 +216,7 @@ export function SettingsView() {
               <h3>Sources</h3>
               <Row title="Gmail" sub="Boîte de réception (onglet Principal), sans marquer les mails comme lus"><span className="tag">Toujours</span></Row>
               <Row title="Google Agenda" sub="Tous tes agendas, avec création, modification et suppression d'événements"><span className="tag">Toujours</span></Row>
+              <Row title="Slack des agences (Roads, Datashake…)" sub="Via les notifications Slack reçues par mail : mentions, messages directs et récaps. Astuce : dans Slack, Préférences → Notifications → « Recevoir des notifications par e-mail » toutes les 15 minutes."><Toggle on={s.syncSlack !== false} onChange={(v) => set({ syncSlack: v })} /></Row>
               <Row title="Google Chat (bêta)" sub="Messages directs et mentions. Les conversations lues par QuestFlow passent en « lu »."><Toggle on={s.syncChat} onChange={(v) => set({ syncChat: v })} /></Row>
             </div>
             <div className="callout" style={{ fontSize: 13 }}>

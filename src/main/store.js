@@ -17,6 +17,7 @@ export const DEFAULT_STATE = {
     autoSyncMinutes: 20,
     mailLookbackDays: 7,
     syncChat: true,
+    syncSlack: true,
     reduceMotion: false,
   },
   tasks: [],

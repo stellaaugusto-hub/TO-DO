@@ -196,7 +196,7 @@ export function quotedHistory(text) {
   return out;
 }
 
-export async function fetchRecentMails(session, { lookbackDays = 7, skipIds = new Set(), max = 40, log, onProgress } = {}) {
+export async function fetchRecentMails(session, { lookbackDays = 7, skipIds = new Set(), max = 40, searches = [], log, onProgress } = {}) {
   const { tab, account } = await openGmail(session);
   try {
     let rows = await tab.evaluate(gmailRows).catch(() => []);
@@ -210,6 +210,24 @@ export async function fetchRecentMails(session, { lookbackDays = 7, skipIds = ne
         via = 'flux';
       }
     }
+    // Recherches en plus de la boîte de réception (ex. notifications Slack, souvent rangées dans
+    // l'onglet « Notifications ») : une recherche Gmail voit tous les onglets.
+    for (const q of searches) {
+      try {
+        // page vierge d'abord : on force un vrai chargement (sinon Gmail garde la liste précédente affichée)
+        await tab.goto('about:blank');
+        await tab.goto(`https://mail.google.com/mail/u/0/#search/${encodeURIComponent(`${q} newer_than:${lookbackDays}d`)}`);
+        await tab.waitFor(gmailReady, [], { timeout: 25e3 });
+        await new Promise((r) => setTimeout(r, 1200));
+        const found = await tab.evaluate(gmailRows).catch(() => []);
+        const known = new Set(rows.map((r) => r.id));
+        const extra = found.filter((r) => !known.has(r.id)).map((r) => ({ ...r, search: q }));
+        rows = rows.concat(extra);
+        log?.info(`gmail (recherche « ${q} ») : ${found.length} fils, ${extra.length} en plus`);
+      } catch (e) {
+        log?.warn(`gmail recherche « ${q} » : ${e.message}`);
+      }
+    }
     const since = Date.now() - lookbackDays * 86400e3;
     // Un fil = son dernier message ET son premier (l'identifiant du fil est celui du 1er message) :
     // le dernier est souvent ta propre réponse, la demande est plus haut.
@@ -217,7 +235,7 @@ export async function fetchRecentMails(session, { lookbackDays = 7, skipIds = ne
       .map((r) => ({ ...r, time: r.time || idTime(r.id) }))
       .filter((r) => !r.time || r.time >= since)
       .filter((r) => !skipIds.has(r.id) || (r.threadId && r.threadId !== r.id && !skipIds.has(r.threadId)))
-      .slice(0, max);
+      .slice(0, max + 25 * searches.length);
     log?.info(`gmail (${via}) : ${rows.length} fils visibles, ${todo.length} à lire`);
     const messages = [];
     const seenTexts = new Set();

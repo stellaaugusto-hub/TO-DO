@@ -193,7 +193,7 @@ async function doSync(sources, { background = false, rescan = false } = {}) {
       notif.on('click', focusWindow);
       notif.show();
     }
-    return { ok: true, newTasks: result.newTasks.map((t) => t.id), events: result.events, mails: result.mails, mailsVisible: result.mailsVisible, chats: result.chats, calendarVia: result.calendarVia, errors: result.errors };
+    return { ok: true, newTasks: result.newTasks.map((t) => t.id), events: result.events, mails: result.mails, mailsVisible: result.mailsVisible, chats: result.chats, slack: result.slack, calendarVia: result.calendarVia, errors: result.errors };
   } catch (e) {
     log.error(`sync: ${e.stack || e.message}`);
     store.update((s) => { s.google.lastError = e.message; });

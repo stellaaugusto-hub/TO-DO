@@ -1004,6 +1004,8 @@ export function extractTasks(msg, opts = {}) {
       // Contexte publicitaire : canal Chat « créa / ads / growth… » ou mail dont l'objet parle d'ads
       const adsContext = /\b(ads?|pubs?|publicit\w*|cr[ée]as?|growth|acquisition|paid|meta ads|google ads)\b/i.test(`${msg.space || ''} ${fwdSubject || subject}`);
       if (adsContext && !tags.includes('ads')) tags.unshift('ads');
+      if (msg.workspaceTag && !tags.includes(msg.workspaceTag)) tags.push(msg.workspaceTag); // agence (Slack)
+      if (source === 'slack' && !tags.includes('ads')) tags.unshift('ads'); // agences créa -> To-do Ads
       const priority = t.priority || computePriority({ urgency: t.urgency, due: t.dueAt, now });
       return {
         title: t.title,

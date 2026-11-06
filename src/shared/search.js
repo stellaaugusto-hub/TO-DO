@@ -2,7 +2,7 @@
 //   #ads              tag
 //   prio:haute  !urgent
 //   date:aujourdhui | demain | semaine | retard | sans | 12/11
-//   source:mail | chat | perso | agenda     (ou @mail, @chat, @perso)
+//   source:mail | chat | slack | perso | agenda     (ou @mail, @chat, @slack, @perso)
 //   diff:3 | diff:facile | diff:epique
 //   de:jean           expéditeur
 //   statut:fait | tout
@@ -14,9 +14,9 @@ import { isSameDay } from './dates.js';
 
 const PRIO_WORDS = { urgent: 1, urgente: 1, '1': 1, haute: 2, high: 2, '2': 2, moyenne: 3, medium: 3, moy: 3, '3': 3, basse: 4, low: 4, '4': 4 };
 const DIFF_WORDS = { facile: 1, simple: 2, moyen: 3, difficile: 4, dur: 4, epique: 5, boss: 5 };
-const SOURCE_WORDS = { mail: 'mail', mails: 'mail', email: 'mail', gmail: 'mail', chat: 'chat', perso: 'manual', moi: 'manual', manuel: 'manual', manual: 'manual', agenda: 'calendar', calendar: 'calendar' };
+const SOURCE_WORDS = { mail: 'mail', mails: 'mail', email: 'mail', gmail: 'mail', chat: 'chat', slack: 'slack', perso: 'manual', moi: 'manual', manuel: 'manual', manual: 'manual', agenda: 'calendar', calendar: 'calendar' };
 const DATE_WORDS = { aujourdhui: 'today', "aujourd'hui": 'today', auj: 'today', today: 'today', demain: 'tomorrow', tomorrow: 'tomorrow', semaine: 'week', week: 'week', retard: 'overdue', overdue: 'overdue', sans: 'nodate', aucune: 'nodate', plus_tard: 'later', later: 'later' };
-export const SOURCE_LABEL = { mail: 'Mail', chat: 'Chat', manual: 'Perso', calendar: 'Agenda' };
+export const SOURCE_LABEL = { mail: 'Mail', chat: 'Chat', slack: 'Slack', manual: 'Perso', calendar: 'Agenda' };
 
 export function parseQuery(q) {
   const out = { text: [], tags: [], priority: [], dates: [], sources: [], difficulty: [], from: [], status: 'todo', dateExact: null };
@@ -34,7 +34,7 @@ export function parseQuery(q) {
       else if ((m = m[1].match(/^(\d{1,2})[/.-](\d{1,2})$/))) out.dateExact = { d: +m[1], m: +m[2] };
       continue;
     }
-    if ((m = tok.match(/^(?:source|src):(.+)$/)) || (m = tok.match(/^@(mail|mails|chat|perso|moi|agenda)$/))) {
+    if ((m = tok.match(/^(?:source|src):(.+)$/)) || (m = tok.match(/^@(mail|mails|chat|slack|perso|moi|agenda)$/))) {
       if (SOURCE_WORDS[m[1]]) { out.sources.push(SOURCE_WORDS[m[1]]); continue; }
     }
     if ((m = tok.match(/^(?:diff|difficulte|niveau):(.+)$/))) {
@@ -113,6 +113,7 @@ export const SEARCH_HINTS = [
   { label: 'Urgentes', q: 'prio:urgente' },
   { label: 'Depuis mes mails', q: 'source:mail' },
   { label: 'Depuis le chat', q: 'source:chat' },
+  { label: 'Depuis Slack (agences)', q: 'source:slack' },
   { label: 'Créées par moi', q: 'source:perso' },
   { label: 'Faciles', q: 'diff:facile' },
   { label: 'Épiques', q: 'diff:epique' },

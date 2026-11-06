@@ -4,6 +4,7 @@ import { listEvents } from './google/calendar.js';
 import { fetchRecentMails, openGmail } from './google/gmail.js';
 import { fetchChatMessages } from './google/chat.js';
 import { NotLoggedInError } from './google/chrome.js';
+import { isSlackNotification, slackMessages } from '../shared/slack.js';
 import { extractTasks } from '../shared/extract.js';
 import { makeTask, isDuplicate } from '../shared/task.js';
 
@@ -68,13 +69,20 @@ async function doSync({ store, chrome, log, onProgress = () => {}, sources = ['c
           log,
           lookbackDays: st.settings.mailLookbackDays,
           skipIds: new Set(processed.mail),
+          searches: st.settings.syncSlack === false ? [] : ['from:slack.com'],
           max: rescan ? 60 : 40,
           onProgress: (p) => progress('mail', `Lecture de tes mails… ${p.done}/${p.total}`, p),
         });
         if (res.account?.email) email = res.account.email;
         result.mails = res.messages.length;
         result.mailsVisible = res.scanned;
-        messages.push(...res.messages);
+        // Notifications Slack (agences) : chaque message devient un message façon Chat
+        for (const m of res.messages) {
+          if (!isSlackNotification(m)) { messages.push(m); continue; }
+          const parts = slackMessages(m, { meName: st.google.profile?.name || st.profile.name, now: new Date() });
+          result.slack = (result.slack || 0) + parts.length;
+          messages.push(...parts, { ...m, slackDone: true });
+        }
         store.update((s) => {
           s.google.connected = true;
           s.google.lastMailSync = new Date().toISOString();
@@ -112,7 +120,7 @@ async function doSync({ store, chrome, log, onProgress = () => {}, sources = ['c
     for (const msg of messages) {
       let extracted = [];
       try {
-        extracted = extractTasks(msg, { userEmail: email || s.google.email, userName: s.profile.name, now }).tasks;
+        if (!msg.slackDone) extracted = extractTasks(msg, { userEmail: email || s.google.email, userName: s.profile.name, now }).tasks;
       } catch (e) {
         log.warn(`extract ${msg.id}: ${e.message}`);
       }
@@ -123,6 +131,7 @@ async function doSync({ store, chrome, log, onProgress = () => {}, sources = ['c
         result.newTasks.push(task);
       }
       // un aperçu partiel sera relu en entier la prochaine fois
+      if (msg.source === 'slack') continue; // la notification d'origine est notée une fois (slackDone)
       const list = msg.source === 'chat' ? s.processed.chat : s.processed.mail;
       if (msg.id && !msg.partial && !list.includes(msg.id)) list.push(msg.id);
     }
@@ -137,6 +146,7 @@ async function doSync({ store, chrome, log, onProgress = () => {}, sources = ['c
       events: sources.includes('calendar') ? result.events : null,
       calendarVia: result.calendarVia || null,
       chats: sources.includes('chat') && st.settings.syncChat ? result.chats : null,
+      slack: result.slack ?? null,
       newTasks: result.newTasks.length,
       errors: result.errors,
     };

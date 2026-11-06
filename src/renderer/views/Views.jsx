@@ -238,7 +238,7 @@ const VIEWS = [
   { id: 'table', label: 'Tableau', icon: Table2 },
   { id: 'board', label: 'Kanban', icon: Columns3 },
 ];
-const SOURCES = [['all', 'Toutes les sources'], ['mail', 'Mails'], ['chat', 'Chat'], ['manual', 'Créées par moi']];
+const SOURCES = [['all', 'Toutes les sources'], ['mail', 'Mails'], ['chat', 'Chat'], ['slack', 'Slack (agences)'], ['manual', 'Créées par moi']];
 const GROUPS = [['due', 'Échéance'], ['priority', 'Priorité'], ['stage', 'Statut'], ['source', 'Source'], ['none', 'Aucun']];
 
 function groupBy(tasks, key) {
