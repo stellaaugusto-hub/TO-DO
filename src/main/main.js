@@ -176,13 +176,14 @@ function focusWindow() {
   win.focus();
 }
 
-async function doSync(sources, { background = false } = {}) {
+async function doSync(sources, { background = false, rescan = false } = {}) {
   try {
     const result = await runSync({
       store,
       chrome,
       log,
       sources,
+      rescan,
       onProgress: (p) => send('sync:progress', p),
     });
     changed();
@@ -273,13 +274,12 @@ function markConnected(c) {
     s.google.profile = { ...(s.google.profile || {}), email: c.email || s.google.email };
   });
   changed();
-  // nom affiché et agenda, en arrière-plan
-  fetchProfile(chrome).then((account) => { if (account?.name) { store.update((s) => { s.google.profile = { ...(s.google.profile || {}), ...account }; }); changed(); } }).catch(() => {});
-  chrome.run((session) => refreshCalendar(session)).catch((e) => {
-    log.warn(`agenda: ${e.message}`);
-    store.update((s) => { s.google.lastError = { ...(typeof s.google.lastError === 'object' && s.google.lastError ? s.google.lastError : {}), calendar: e.message }; });
-    changed();
-  });
+  // nom affiché, puis un premier scan complet en arrière-plan (mails de la semaine, agenda, chat)
+  fetchProfile(chrome)
+    .then((account) => { if (account?.name) { store.update((s) => { s.google.profile = { ...(s.google.profile || {}), ...account }; }); changed(); } })
+    .catch(() => {})
+    .then(() => (isSyncing() ? null : doSync(['mail', 'calendar', 'chat'], { background: true })))
+    .then((r) => r && send('sync:background', r));
 }
 
 /** Rapport de diagnostic à copier (versions, profils, derniers résultats, journal Google) : sans contenu de mails. */
@@ -554,7 +554,7 @@ function registerIpc() {
         if (st.settings.syncChat) {
           try {
             const { fetchChatMessages } = await import('./google/chat.js');
-            out.chats = (await fetchChatMessages(session, { log, meName: st.google.profile?.name || st.profile.name, lookbackDays: 3, maxConversations: 2 })).conversations;
+            out.chats = (await fetchChatMessages(session, { log, meName: st.google.profile?.name || st.profile.name, meEmail: st.google.email, lookbackDays: 3, maxConversations: 2 })).conversations;
           } catch (e) { out.errors.chat = e.message; }
         }
       });
@@ -618,7 +618,7 @@ function registerIpc() {
   });
   ipcMain.handle('calendar:openWeb', () => shell.openExternal('https://calendar.google.com/calendar/u/0/r/week'));
 
-  ipcMain.handle('sync:run', (_e, sources) => doSync(sources || ['calendar', 'mail', 'chat']));
+  ipcMain.handle('sync:run', (_e, sources, opts = {}) => doSync(sources || ['calendar', 'mail', 'chat'], { rescan: !!opts.rescan }));
 
   ipcMain.handle('updater:check', () => updater.check());
   ipcMain.handle('updater:install', () => updater.downloadAndInstall());

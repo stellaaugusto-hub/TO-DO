@@ -36,8 +36,11 @@ export function calendarWindow(now = new Date()) {
   return { from, to };
 }
 
-async function doSync({ store, chrome, log, onProgress = () => {}, sources = ['calendar', 'mail', 'chat'] }) {
+async function doSync({ store, chrome, log, onProgress = () => {}, sources = ['calendar', 'mail', 'chat'], rescan = false }) {
   const st = store.get();
+  // « Relire la semaine » : on repasse sur tous les messages de la période (les doublons sont écartés).
+  const processed = rescan ? { mail: [], chat: [] } : st.processed;
+  if (rescan) log.info('sync : relecture complète de la période');
   const result = { newTasks: [], events: 0, mails: 0, chats: 0, errors: {} };
   const progress = (key, label, extra = {}) => onProgress({ key, label, ...extra });
 
@@ -64,7 +67,8 @@ async function doSync({ store, chrome, log, onProgress = () => {}, sources = ['c
         const res = await fetchRecentMails(session, {
           log,
           lookbackDays: st.settings.mailLookbackDays,
-          skipIds: new Set(st.processed.mail),
+          skipIds: new Set(processed.mail),
+          max: rescan ? 60 : 40,
           onProgress: (p) => progress('mail', `Lecture de tes mails… ${p.done}/${p.total}`, p),
         });
         if (res.account?.email) email = res.account.email;
@@ -94,7 +98,7 @@ async function doSync({ store, chrome, log, onProgress = () => {}, sources = ['c
     if (sources.includes('chat') && st.settings.syncChat) {
       progress('chat', 'Lecture de tes conversations Chat…');
       try {
-        const res = await fetchChatMessages(session, { log, meName: st.google.profile?.name || st.profile.name, lookbackDays: Math.min(3, st.settings.mailLookbackDays), skipIds: new Set(st.processed.chat) });
+        const res = await fetchChatMessages(session, { log, meName: st.google.profile?.name || st.profile.name, meEmail: email || st.google.email, lookbackDays: Math.min(7, st.settings.mailLookbackDays), skipIds: new Set(processed.chat) });
         result.chats = res.messages.length;
         messages.push(...res.messages);
         store.update((s) => { s.google.lastChatSync = new Date().toISOString(); });

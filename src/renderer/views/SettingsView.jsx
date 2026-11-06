@@ -198,6 +198,11 @@ export function SettingsView() {
                   <span />
                 </Row>
               )}
+              {g.connected && (
+                <Row title="Relire mes mails et Chat de la semaine" sub="Utile si des demandes manquent dans ta to-do">
+                  <button className="btn sm primary" onClick={() => runSync({ rescan: true })}><RefreshCw size={14} /> Relire</button>
+                </Row>
+              )}
               <Row title="Rapport de diagnostic" sub="Copie un rapport technique (sans le contenu de tes mails) à m'envoyer si quelque chose ne marche pas">
                 <button className="btn sm outline" onClick={async () => { const t = await api.googleReport(); try { await navigator.clipboard.writeText(t); toast('Rapport copié : colle-le dans ton message', { icon: 'check' }); } catch { toast('Copie impossible', { icon: 'alert' }); } }}>Copier le rapport</button>
               </Row>
@@ -235,7 +240,8 @@ export function SettingsView() {
                   <option value={2}>2 derniers jours</option><option value={7}>7 derniers jours</option><option value={14}>14 derniers jours</option><option value={30}>30 derniers jours</option>
                 </select>
               </Row>
-              <Row title="Scanner maintenant"><button className="btn sm outline" onClick={runSync}><RefreshCw size={14} /> Lancer</button></Row>
+              <Row title="Scanner maintenant" sub="Les nouveaux mails et messages Chat"><button className="btn sm outline" onClick={() => runSync()}><RefreshCw size={14} /> Lancer</button></Row>
+              <Row title="Relire toute la période" sub={`Repasse sur tous les mails et messages Chat des ${s.mailLookbackDays} derniers jours, même ceux déjà lus (les quêtes en double sont écartées)`}><button className="btn sm outline" onClick={() => runSync({ rescan: true })}><RefreshCw size={14} /> Relire</button></Row>
             </div>
           </>
         )}

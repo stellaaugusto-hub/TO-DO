@@ -45,8 +45,10 @@ export default function App() {
       }),
       api.onBackgroundSync((r) => {
         if (r?.ok && r.newTasks.length) {
-          useApp.getState().toast(`${r.newTasks.length} nouvelle(s) quête(s) détectée(s)`);
+          useApp.getState().toast(`${r.newTasks.length} nouvelle(s) quête(s) détectée(s)${r.mails != null ? ` dans ${r.mails} mail(s) et ${r.chats ?? 0} message(s)` : ''}`);
           useApp.setState({ highlight: r.newTasks });
+        } else if (r && !r.ok) {
+          useApp.getState().toast(`Scan : ${r.error}`, { icon: 'alert', ms: 7000 });
         }
       }),
     ];

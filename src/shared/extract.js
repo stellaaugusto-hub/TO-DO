@@ -46,7 +46,7 @@ function addressListIncludes(list, email) {
   return (fold(list).match(/[\w.+-]+@[\w.-]+/g) || []).some((x) => sameAddress(x, email));
 }
 
-export function classifyMessage(msg, { userEmail } = {}) {
+export function classifyMessage(msg, { userEmail, userName } = {}) {
   const fromEmail = fold(msg.from?.email || '');
   const local = fromEmail.split('@')[0] || '';
   const subject = fold(msg.subject || '');
@@ -60,11 +60,18 @@ export function classifyMessage(msg, { userEmail } = {}) {
   if (AUTOMATED_SENDER.test(local) || /noreply|no-reply/.test(fromEmail)) {
     return assignment ? { skip: null, assignment: true } : { skip: 'automated-sender' };
   }
-  if (/^(bulk|junk|list)$/.test(fold(h.precedence || '').trim())) return { skip: 'bulk' };
+  // Mail d'un collègue envoyé à une adresse de groupe (Google Groups, ex. marketing@entreprise.fr) :
+  // il porte les en-têtes d'une liste de diffusion mais ce n'est pas une newsletter.
+  const domain = (a) => (a || '').split('@')[1] || '';
+  const internal = !!userEmail && !!fromEmail && domain(fold(userEmail)) === domain(fromEmail) && !/^(gmail|googlemail|outlook|hotmail|yahoo|icloud)\./.test(domain(fromEmail));
+  const isGroup = !!(h['x-google-group-id'] || h['mailing-list'] || /googlegroups|google\.com\/a\//.test(`${h['list-unsubscribe'] || ''} ${h['list-id'] || ''} ${h['list-post'] || ''}`));
+  const first = fold((userName || '').trim().split(/\s+/)[0] || '');
+  const mentionsMe = !!first && new RegExp(`(^|[\\s,(])@${first}\\b|(^|\\n)\\s*${first}\\s*,`).test(body.slice(0, 8000));
+  const colleague = isGroup || internal || mentionsMe;
+  if (/^(bulk|junk|list)$/.test(fold(h.precedence || '').trim()) && !colleague) return { skip: 'bulk' };
   if (h['auto-submitted'] && !/^no$/i.test(h['auto-submitted'].trim())) return { skip: 'auto-submitted' };
   if (h['x-autoreply'] || h['x-autorespond'] || /oof|autoreply/i.test(h['x-auto-response-suppress'] || '') && /^(re: )?(absence|out of office|automatic)/.test(subject)) return { skip: 'auto-reply' };
-  const isGroup = !!(h['x-google-group-id'] || h['mailing-list']);
-  if (h['list-unsubscribe'] && !isGroup) return { skip: 'newsletter' };
+  if (h['list-unsubscribe'] && !colleague) return { skip: 'newsletter' };
   for (const re of AUTOMATED_SUBJECT) if (re.test(subject)) return { skip: 'automated-subject' };
   const links = (body.match(/https?:\/\//g) || []).length;
   if (/(unsubscribe|desinscri|desabonn|se desinscrire|gerer (mes|vos) preferences)/.test(body) && links >= 4) return { skip: 'newsletter' };
@@ -193,6 +200,7 @@ const REQUESTS = [
   { re: /^(il faut|il faudrait|faudrait|faut|il va falloir|va falloir)( absolument| vraiment| juste| aussi)? /, score: 3 },
   { re: /^(tu |vous )(dois|devrais|devez|devriez|devras|devrez|vas devoir|allez devoir|as a|avez a|vas|allez) /, score: 3 },
   { re: /^(on |nous )(doit|devrait|devons|devrions|a a|va devoir|aurait besoin de) /, score: 2.5 },
+  { re: /^(est-ce qu'on |est ce qu'on |est-ce que l'on |est-ce que nous )?(on |nous )?(peut|pourrait|pourra|pouvons|pourrions)( |-)(on |nous )?((bien|deja|aussi|egalement|du coup|bientot)[ ,]+)*/, score: 3, question: true },
   { re: /^(j'ai besoin que |j'aurais besoin que |j'aimerais que |je voudrais que |je souhaiterais que |je souhaite que |ce serait bien que |ce serait top que |il faudrait que )(tu |vous )/, score: 3.5, subj: true },
   { re: /^(j'ai besoin |j'aurais besoin |il me faudrait |il me faut |on aurait besoin |nous aurions besoin |j'aimerais avoir |j'aimerais recevoir )/, score: 3, need: true },
   { re: /^(n'oublie pas|n'oubliez pas|n'oublies pas|ne pas oublier|noublie pas|n oublie pas|oublie pas|ne surtout pas oublier)( de| d')? ?/, score: 3.5 },
@@ -209,6 +217,7 @@ const REQUESTS = [
   { re: /^(we need to|we should|we must|we have to|let's|lets) /, score: 2.5 },
   { re: /^(would you mind|do you mind) /, score: 3.5, gerund: true },
   { re: /^(is it possible (for you )?to|would it be possible (for you )?to|are you able to|could we) /, score: 3 },
+  { re: /^(can|shall|should) we /, score: 3, question: true },
 ];
 
 const CLITIC = /^(me |m'|nous |te |t'|lui |leur |le |la |les |l'|en |y |bien |aussi |egalement |juste |rapidement |vite |deja |stp |svp )+/;
@@ -289,13 +298,17 @@ export function analyzeSentence(sentence, ctx = {}) {
   // mention @Nom en début (chat) / vocatif « Paul, peux-tu… »
   let addressedToOther = false;
   let addressedToMe = false;
-  const mention = s.match(/^@([\p{L}][\p{L}.\- ]{0,30}?)\b[\s,:]+/u);
-  if (mention) {
+  // « @Stella Augusto peux-tu… », « @stella.augusto », « Hello @Stella, … » : Prénom Nom en entier
+  const stripMention = () => {
+    const mention = s.match(/^@(\p{Lu}[\p{L}'’-]*(?:[ .]\p{Lu}[\p{L}'’-]*){0,2}|[\p{L}][\p{L}.\-]{0,30}?)(?=[\s,:;!?]|$)[\s,:;]*/u);
+    if (!mention) return false;
     const target = fold(mention[1]).split(/[\s.]/)[0];
-    if (ctx.userFirstName && target !== fold(ctx.userFirstName) && !/^(all|tous|everyone|here|channel|equipe|team)$/.test(target)) addressedToOther = true;
+    if (ctx.userFirstName && target !== fold(ctx.userFirstName) && !/^(all|tous|tout|everyone|here|channel|equipe|team)$/.test(target)) addressedToOther = true;
     if (ctx.userFirstName && target === fold(ctx.userFirstName)) addressedToMe = true;
     s = s.slice(mention[0].length);
-  }
+    return true;
+  };
+  while (stripMention()) { /* plusieurs mentions à la suite */ }
 
   let changed = true;
   while (changed) {
@@ -308,6 +321,7 @@ export function analyzeSentence(sentence, ctx = {}) {
       s = s.slice(m[0].length); changed = true; continue;
     }
     if ((m = f0.match(/^(stp|svp|s'il te plait|s'il vous plait)[\s,]+/))) { s = s.slice(m[0].length); changed = true; continue; }
+    if (s.startsWith('@') && stripMention()) { changed = true; continue; }
     if ((m = f0.match(FILLERS)) && m[0].length && m[0].length < s.length) {
       // « Merci de … » est une demande : on ne retire pas « merci » dans ce cas
       if (/^merci (de|d')/.test(f0) || /^thanks? (for|to)/.test(f0)) break;
@@ -350,7 +364,8 @@ export function analyzeSentence(sentence, ctx = {}) {
   let req = null;
   for (const r of REQUESTS) {
     const m = f.match(r.re);
-    if (m) {
+    if (m && m[0].trim()) {
+      if (r.question && !/\?\s*$/.test(s.trim())) continue;
       req = r;
       core = s.slice(m[0].length).trim();
       score += r.score;
@@ -675,9 +690,55 @@ function findSoftAsk(units, { lang, sender, subject }) {
  * @param {object} msg { id, threadId, source:'mail'|'chat', from:{name,email}, subject, date, text, html, headers }
  * @param {object} opts { now, userEmail, userName }
  */
+// --- Alertes des plateformes publicitaires (Meta, Google Ads, TikTok, LinkedIn…) ----------
+const ADS_PLATFORMS = [
+  ['Meta', /(facebookmail\.com|(^|\.)meta\.com|(^|\.)facebook\.com|business\.instagram\.com)$/],
+  ['Google Ads', /(^|\.)google\.com$/, /ads|adwords|merchant|payments/],
+  ['TikTok', /(^|\.)tiktok(global)?\.com$|(^|\.)bytedance\.com$/],
+  ['LinkedIn', /(^|\.)linkedin\.com$/, /ads|campaign|marketing/],
+  ['Pinterest', /(^|\.)pinterest\.com$/, /ads|business/],
+  ['Snapchat', /(^|\.)snap(chat)?\.com$/, /ads|business/],
+  ['Microsoft Ads', /(^|\.)microsoft\.com$/, /ads|advertising|bingads/],
+];
+const ADS_ACTION = /(refus|rejet|desapprouv|non approuv|disapprov|rejected|not approved|desactiv|suspend|restreint|restrict|disabled|bloque|blocked|paiement|payment|facturation|billing|carte bancaire|credit card|echoue|failed|declined|action requise|action required|action needed|intervention requise|verifi|verify|confirm(e|ez|er)? (votre|your)|limite de depense|spending limit|budget (epuise|atteint)|out of budget|regles publicitaires|ad polic|policy|violation|non conforme)/;
+const ADS_INFO = /(est (maintenant )?(en ligne|active|approuvee?)|is (now )?(live|active|approved)|rapport|report|performance|resultats|results|recu |receipt|facture disponible|invoice (is )?available|astuce|tips?|webinar|nouveaute|what's new|recap|resume hebdo|weekly)/;
+
+/** Mail automatique d'une régie pub qui demande une action -> une quête « ads ». */
+function adsAlertTask(msg, now) {
+  const fromEmail = fold(msg.from?.email || '');
+  const [local, domain = ''] = fromEmail.split('@');
+  const platform = ADS_PLATFORMS.find(([, d, l]) => d.test(domain) && (!l || l.test(local) || l.test(fold(msg.subject || ''))));
+  if (!platform) return null;
+  const subject = (msg.subject || '').replace(/^((re|tr|fw|fwd)\s*:\s*)+/i, '').trim();
+  const fs = fold(subject);
+  if (!ADS_ACTION.test(fs) || ADS_INFO.test(fs)) return null;
+  const due = new Date(now);
+  due.setHours(18, 0, 0, 0);
+  if (due < now) due.setTime(now.getTime() + 2 * 3600e3);
+  const urgent = /(refus|rejet|desapprouv|disapprov|rejected|suspend|desactiv|disabled|paiement|payment|echoue|failed|declined|bloque|blocked)/.test(fs);
+  return {
+    title: truncate(`${platform[0]} : ${subject.charAt(0).toUpperCase()}${subject.slice(1)}`, 90),
+    description: (msg.text || '').trim().slice(0, 600),
+    subtasks: [],
+    dueAt: due.toISOString(),
+    priority: urgent ? 2 : 3,
+    difficulty: 2,
+    tags: ['ads'],
+    icon: 'megaphone',
+    color: 'orange',
+    confidence: 0.9,
+    source: 'mail',
+    sourceMeta: { id: msg.id || null, threadId: msg.threadId || null, from: msg.from || null, subject: msg.subject || '', date: msg.date || null, url: msg.url || null, kind: 'ads-alert' },
+  };
+}
+
 export function extractTasks(msg, opts = {}) {
   const now = opts.now ? new Date(opts.now) : new Date();
   const source = msg.source || 'mail';
+  if (source === 'mail') {
+    const ads = adsAlertTask(msg, now);
+    if (ads) return { skipped: null, tasks: [ads] };
+  }
   const cls = source === 'mail' ? classifyMessage(msg, opts) : { skip: msg.fromSelf ? 'self' : null };
   if (cls.skip) return { skipped: cls.skip, tasks: [] };
 

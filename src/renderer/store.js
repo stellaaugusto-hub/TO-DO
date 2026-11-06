@@ -69,7 +69,7 @@ export const useApp = create((set, get) => ({
     get().toast(`Quête supprimée : ${task.title}`, { icon: 'trash' });
   },
 
-  async runSync() {
+  async runSync({ rescan = false } = {}) {
     if (get().sync) return;
     const prevTab = get().tab;
     set({ sync: { key: 'connect', label: 'Ouverture de Chrome en arrière-plan…', done: [], startedAt: Date.now() } });
@@ -81,7 +81,7 @@ export const useApp = create((set, get) => ({
     });
     let res;
     try {
-      res = await api.sync(['calendar', 'mail', 'chat']);
+      res = await api.sync(['calendar', 'mail', 'chat'], { rescan });
     } finally {
       off();
     }

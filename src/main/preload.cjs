@@ -31,7 +31,7 @@ contextBridge.exposeInMainWorld('api', {
   onCalendarAssist: on('calendar:assist'),
   googleDisconnect: () => ipcRenderer.invoke('google:disconnect'),
   googleStatus: () => ipcRenderer.invoke('google:status'),
-  sync: (sources) => ipcRenderer.invoke('sync:run', sources),
+  sync: (sources, opts) => ipcRenderer.invoke('sync:run', sources, opts),
   onSyncProgress: on('sync:progress'),
   onBackgroundSync: on('sync:background'),
   calendarRefresh: () => ipcRenderer.invoke('calendar:refresh'),

@@ -1,5 +1,15 @@
 # Journal des versions
 
+## 1.5.0
+- Les demandes qui manquaient arrivent dans ta to-do :
+  - « @Stella Augusto peux-tu… » (mention avec prénom et nom) dans un mail ou dans Chat ;
+  - « On peut lancer … aujourd'hui ? », « Est-ce qu'on peut … ? » dans un canal Chat ;
+  - mails d'équipe envoyés à une adresse de groupe (ex. marketing@…) : ils ne sont plus pris pour des newsletters.
+- Google Chat : lecture refaite avec le vrai balisage de Chat (canaux et messages privés) ; tes propres messages et ceux adressés à quelqu'un d'autre sont ignorés.
+- Ads : les alertes des régies (Meta, Google Ads, TikTok, LinkedIn…) qui demandent une action deviennent des quêtes (pub refusée, paiement refusé, compte suspendu, action requise). Les simples informations (pub en ligne, rapports) restent ignorées.
+- Juste après la connexion, QuestFlow scanne automatiquement tes mails, ton agenda et Chat.
+- Nouveau : « Relire mes mails et Chat de la semaine » (Réglages → Google ou Synchronisation) pour repasser sur toute la période, sans créer de doublons.
+
 ## 1.4.0
 - Google Agenda se lit à nouveau : l'export demande désormais un jeton que Google donne sur le bouton « Exporter » des paramètres. QuestFlow passe par ce bouton, comme toi. Si l'export n'est pas disponible, il lit les événements directement dans les pages « semaine » de Google Agenda.
 - Gmail : le message d'origine est lu par l'adresse « Télécharger le message » de Gmail (la plus fiable), puis « Afficher l'original » en secours.

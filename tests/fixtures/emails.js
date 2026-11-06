@@ -22,6 +22,45 @@ CONFIDENTIALITY NOTICE: This email and any attachments are intended solely for t
 
 export const EMAILS = [
   {
+    name: 'alerte Meta : publicité refusée -> quête ads',
+    msg: { from: { name: 'Meta for Business', email: 'advertise-noreply@support.facebookmail.com' }, to: 'stella.augusto@innerskin.fr', subject: 'Votre publicité « Hydra X – Black Friday » a été refusée', headers: { 'list-unsubscribe': '<https://facebook.com/u>' }, text: "Votre publicité ne respecte pas nos règles publicitaires. Modifiez-la puis soumettez-la à nouveau." },
+    expect: { tasks: [{ title: 'Meta : Votre publicité « Hydra X – Black Friday » a été refusée', priority: 2, tags: ['ads'] }] },
+  },
+  {
+    name: 'alerte Google Ads : paiement refusé -> quête ads',
+    msg: { from: { name: 'Google Ads', email: 'ads-account-noreply@google.com' }, to: 'stella.augusto@innerskin.fr', subject: 'Action requise : votre paiement a été refusé', text: 'Mettez à jour votre mode de paiement pour que vos annonces continuent de diffuser.' },
+    expect: { tasks: [{ title: 'Google Ads : Action requise : votre paiement a été refusé', priority: 2, tags: ['ads'] }] },
+  },
+  {
+    name: 'info Meta : publicité approuvée -> rien',
+    msg: { from: { name: 'Meta for Business', email: 'advertise-noreply@support.facebookmail.com' }, to: 'stella.augusto@innerskin.fr', subject: 'Votre publicité est maintenant active', text: 'Bonne nouvelle, votre publicité est en ligne.' },
+    expect: { none: true, skipped: true },
+  },
+  {
+    name: 'rapport Google Ads hebdo -> rien',
+    msg: { from: { name: 'Google Ads', email: 'ads-noreply@google.com' }, to: 'stella.augusto@innerskin.fr', subject: 'Votre rapport de performance hebdomadaire', text: 'Voici les résultats de vos campagnes.' },
+    expect: { none: true, skipped: true },
+  },
+  {
+    name: "exemple réel : mention @Stella Augusto dans un mail d'équipe (adresse de groupe Google)",
+    msg: {
+      from: { name: 'Julie Martin', email: 'julie.martin@innerskin.fr' }, to: 'marketing@innerskin.fr', subject: 'Soirée top clients au Shangri-La - 18 novembre 2026',
+      headers: { precedence: 'list', 'list-id': '<marketing.innerskin.fr>', 'list-unsubscribe': '<mailto:googlegroups-manage+123+unsubscribe@googlegroups.com>', 'mailing-list': 'list marketing@innerskin.fr' },
+      text: `Bonjour à tous,\n\nVoici le déroulé de la soirée top clients au Shangri-La le 18 novembre.\n\n@Stella Augusto peux-tu préparer une invitation digitale ce matin ?\n\nMerci,\nJulie`,
+    },
+    expect: { tasks: [{ title: 'Préparer une invitation digitale', due: '2026-10-28T12:00' }] },
+  },
+  {
+    name: 'groupe interne sans en-tête Google mais même domaine, mention par vocatif',
+    msg: { from: { name: 'Hugo', email: 'hugo@innerskin.fr' }, to: 'equipe@innerskin.fr', subject: 'Ads Hydra X', headers: { precedence: 'bulk', 'list-unsubscribe': '<https://lists.innerskin.fr/u>' }, text: 'Hello,\n\nStella, peux-tu couper les ads Meta Hydra X ce soir ?\n\nHugo' },
+    expect: { tasks: [{ title: 'Couper les ads Meta Hydra X', due: '2026-10-28T20:00' }] },
+  },
+  {
+    name: 'newsletter externe avec « @Stella » dans le texte promotionnel : reste ignorée si pas de demande',
+    msg: { from: { name: 'Brand News', email: 'news@marque-externe.com' }, to: 'stella.augusto@innerskin.fr', subject: 'Nos nouveautés', headers: { precedence: 'bulk', 'list-unsubscribe': '<https://marque-externe.com/u>' }, text: 'Découvrez nos nouveautés de la semaine.\n\nVoir la version en ligne\nSe désinscrire' },
+    expect: { none: true, skipped: true },
+  },
+  {
     name: "exemple de l'utilisatrice : ajoute des ads sur 3 plateformes",
     msg: { from: { name: 'Jean Dupont', email: 'jean.dupont@innerskin.fr' }, subject: 'Ads', text: `Salut Stella,\n\nAjoute des nouvelles ads sur Facebook, Instagram et TikTok stp.\n\nMerci !${SIG_JEAN}` },
     expect: { tasks: [{ title: 'Ajouter des nouvelles ads sur Facebook, Instagram et TikTok', subtasks: ['Facebook', 'Instagram', 'TikTok'], tags: ['ads'] }] },
@@ -331,4 +370,10 @@ export const CHATS = [
   { name: 'chat : mention de quelqu’un d’autre', msg: { source: 'chat', from: { name: 'Paul' }, text: '@Marc tu peux envoyer le fichier ?' }, expect: { none: true } },
   { name: 'chat : impératif', msg: { source: 'chat', from: { name: 'Julie' }, text: 'Envoie-moi le lien du Drive stp' }, expect: { tasks: [{ title: 'Envoyer le lien du Drive à Julie' }] } },
   { name: 'chat : constat', msg: { source: 'chat', from: { name: 'Julie' }, text: "J'ai envoyé le fichier au client, c'est bon." }, expect: { none: true } },
+  // Exemples réels de l'utilisatrice (canal « créa »)
+  { name: 'chat canal : « On peut lancer … aujourd’hui ? »', msg: { source: 'chat', from: { name: 'Chrystelle' }, space: 'créa', text: 'On peut lancer les nouvelles hydra x et paiement en 12 fois aujourd’hui ?' }, expect: { tasks: [{ title: 'Lancer les nouvelles hydra x et paiement en 12 fois', due: '2026-10-28' }] } },
+  { name: 'chat canal : « Est-ce qu’on peut … ? »', msg: { source: 'chat', from: { name: 'Chrystelle' }, space: 'créa', text: "Est-ce qu'on peut mettre en ligne la bannière Black Friday demain ?" }, expect: { tasks: [{ title: 'Mettre en ligne la bannière Black Friday', due: '2026-10-29' }] } },
+  { name: 'chat canal : « On peut se voir demain. » (pas une question) : rien', msg: { source: 'chat', from: { name: 'Chrystelle' }, space: 'créa', text: 'On peut se dire que la campagne a bien marché.' }, expect: { none: true } },
+  { name: 'chat : @Prénom Nom de l’utilisatrice', msg: { source: 'chat', from: { name: 'Paul' }, text: '@Stella Augusto tu peux relire le post LinkedIn ?' }, expect: { tasks: [{ title: 'Relire le post LinkedIn' }] } },
+  { name: 'chat : @Prénom Nom de quelqu’un d’autre', msg: { source: 'chat', from: { name: 'Paul' }, text: '@Marc Dubois tu peux relire le post LinkedIn ?' }, expect: { none: true } },
 ];
