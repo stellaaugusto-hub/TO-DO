@@ -161,6 +161,41 @@ export async function openGmail(session) {
   return { tab, account };
 }
 
+/** Petite empreinte stable d'un texte (identifiant des messages retrouvés dans les citations). */
+function hash(t) {
+  let h = 5381;
+  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+
+/**
+ * Historique cité dans une réponse (« Le …, Prénom Nom <adresse> a écrit : » puis « > … ») :
+ * retrouve les messages précédents du fil, avec leur auteur. Profondeur 1 = message précédent.
+ */
+export function quotedHistory(text) {
+  const lines = String(text || '').replace(/\r/g, '').split('\n');
+  const depthOf = (l) => { const m = l.match(/^((?:[ \t]*>)+)/); return m ? (m[1].match(/>/g) || []).length : 0; };
+  const strip = (l, d) => { let x = l; for (let i = 0; i < d; i++) x = x.replace(/^[ \t]*>[ \t]?/, ''); return x; };
+  const byDepth = new Map();
+  for (const l of lines) {
+    const d = depthOf(l);
+    if (!byDepth.has(d)) byDepth.set(d, []);
+    byDepth.get(d).push(strip(l, d));
+  }
+  const ATTR = /(?:^|\n)[ \t]*(?:Le|On)\s[^\n]*?(?:\n[^\n]*?)?,?[ \t]*([^<\n,]+?)\s*<([^>\s]+@[^>\s]+)>\s*(?:a\s+[ée]crit|wrote)\s*:/g;
+  const HEADER = /\n[ \t]*(?:Le|On)\s[^\n]*(?:\n[^\n]*)?(?:a\s+[ée]crit|wrote)\s*:[\s\S]*$/;
+  const out = [];
+  const maxD = Math.max(0, ...byDepth.keys());
+  for (let d = 1; d <= maxD; d++) {
+    const parent = (byDepth.get(d - 1) || []).join('\n');
+    const attrs = [...parent.matchAll(ATTR)];
+    const a = attrs[attrs.length - 1];
+    const own = `\n${(byDepth.get(d) || []).join('\n')}`.replace(HEADER, '').trim();
+    if (own) out.push({ depth: d, fromName: (a?.[1] || '').trim(), fromEmail: (a?.[2] || '').trim().toLowerCase(), text: own });
+  }
+  return out;
+}
+
 export async function fetchRecentMails(session, { lookbackDays = 7, skipIds = new Set(), max = 40, log, onProgress } = {}) {
   const { tab, account } = await openGmail(session);
   try {
@@ -176,30 +211,63 @@ export async function fetchRecentMails(session, { lookbackDays = 7, skipIds = ne
       }
     }
     const since = Date.now() - lookbackDays * 86400e3;
+    // Un fil = son dernier message ET son premier (l'identifiant du fil est celui du 1er message) :
+    // le dernier est souvent ta propre réponse, la demande est plus haut.
     const todo = rows
       .map((r) => ({ ...r, time: r.time || idTime(r.id) }))
-      .filter((r) => !skipIds.has(r.id) && (!r.time || r.time >= since))
+      .filter((r) => !r.time || r.time >= since)
+      .filter((r) => !skipIds.has(r.id) || (r.threadId && r.threadId !== r.id && !skipIds.has(r.threadId)))
       .slice(0, max);
     log?.info(`gmail (${via}) : ${rows.length} fils visibles, ${todo.length} à lire`);
     const messages = [];
+    const seenTexts = new Set();
     let partial = 0;
+    let quoted = 0;
+    const read = async (id, row) => {
+      try {
+        const raw = await tab.evaluate(gmailRawInPage, id);
+        if (raw) return await parseRaw(raw, { ...row, id, time: idTime(id) });
+      } catch (e) {
+        log?.warn(`gmail ${id}: ${e.message}`);
+      }
+      return null;
+    };
     for (let i = 0; i < todo.length; i++) {
       const row = todo[i];
       onProgress?.({ done: i + 1, total: todo.length });
-      let msg = null;
-      try {
-        const raw = await tab.evaluate(gmailRawInPage, row.id);
-        if (raw) msg = await parseRaw(raw, row);
-      } catch (e) {
-        log?.warn(`gmail ${row.id}: ${e.message}`);
-      }
-      if (!msg) {
+      // dernier message du fil
+      let last = skipIds.has(row.id) ? null : await read(row.id, row);
+      if (!last && !skipIds.has(row.id)) {
         partial++;
-        msg = rowToMessage(row);
+        last = rowToMessage(row);
       }
-      messages.push(msg);
+      if (last) {
+        messages.push(last);
+        seenTexts.add(last.text.slice(0, 160));
+      }
+      // premier message du fil (la demande d'origine), s'il est récent
+      if (row.threadId && row.threadId !== row.id && !skipIds.has(row.threadId) && idTime(row.threadId) >= since - lookbackDays * 86400e3) {
+        const first = await read(row.threadId, row);
+        if (first) {
+          messages.push(first);
+          seenTexts.add(first.text.slice(0, 160));
+        }
+      }
+      // messages intermédiaires retrouvés dans l'historique cité de la dernière réponse
+      if (last && !last.partial) {
+        for (const q of quotedHistory(last.text)) {
+          const key = q.text.slice(0, 160);
+          if ([...seenTexts].some((t) => t.slice(0, 80) === key.slice(0, 80))) continue;
+          const qid = `${row.threadId || row.id}:${hash(q.fromEmail + q.text.slice(0, 400))}`;
+          if (skipIds.has(qid)) continue;
+          seenTexts.add(key);
+          quoted++;
+          messages.push({ ...last, id: qid, from: { name: q.fromName, email: q.fromEmail }, to: '', cc: '', text: q.text, html: '', headers: {}, quoted: true });
+        }
+      }
     }
     if (partial) log?.warn(`gmail : ${partial} message(s) lus depuis l'aperçu seulement`);
+    log?.info(`gmail : ${messages.length} messages analysés (${quoted} retrouvés dans les fils)`);
     return { messages, account, scanned: rows.length };
   } finally {
     await tab.close();

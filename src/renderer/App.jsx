@@ -9,11 +9,11 @@ import { Greeting, SuccessOverlay, LoadingScreen, UpdateOverlay, Toasts } from '
 import { Onboarding } from './components/Onboarding.jsx';
 import { TaskPeek } from './components/TaskPeek.jsx';
 import { ChromeConnect } from './components/ChromeConnect.jsx';
-import { QuestsView, TodoView, DoneView, PasteModal } from './views/Views.jsx';
+import { QuestsView, TodoView, AdsView, DoneView, PasteModal } from './views/Views.jsx';
 import { AgendaView } from './views/AgendaView.jsx';
 import { SettingsView } from './views/SettingsView.jsx';
 
-const VIEWS = { quests: QuestsView, todo: TodoView, done: DoneView, agenda: AgendaView, settings: SettingsView };
+const VIEWS = { quests: QuestsView, todo: TodoView, ads: AdsView, done: DoneView, agenda: AgendaView, settings: SettingsView };
 
 export default function App() {
   const { data, phase, tab, setData, setPhase, setTab, newTask, runSync, openTask, setUpdater } = useApp();

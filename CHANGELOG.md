@@ -1,5 +1,14 @@
 # Journal des versions
 
+## 1.6.0
+- Fils de discussion lus en entier : le premier message (la demande d'origine), le dernier, et les messages intermédiaires retrouvés dans l'historique cité. Avant, seul le dernier message était lu, souvent ta propre réponse ou ta réaction ♥️, et la demande passait à la trappe.
+- Mails qui répartissent les tâches avec « @Prénom Nom <adresse> peux-tu… » : seules les demandes qui te sont adressées sont gardées (pas celles de Lara, Sarah…), même quand la phrase est coupée sur deux lignes.
+- Plans de priorités (« Priorité 1 (d'ici le 13/11) : Black friday », « Priorité 2 : … ») : une quête par priorité, avec ses points en sous-étapes et son échéance.
+- Nouvelle page « To-do Ads » dans la barre latérale : toutes tes quêtes publicitaires.
+- Moins de bruit : réponses aux invitations d'agenda, rapports de caisse automatiques et « See the call agenda below » ne deviennent plus des quêtes.
+- Alertes d'outils (paiement échoué, action requise, compte suspendu) : elles deviennent des quêtes, quel que soit l'outil.
+- « Il faudra que tu l'envoies à Sarah » : le titre reprend l'objet du mail (« Envoyer à Sarah (Soirée top clients…) »).
+
 ## 1.5.0
 - Les demandes qui manquaient arrivent dans ta to-do :
   - « @Stella Augusto peux-tu… » (mention avec prénom et nom) dans un mail ou dans Chat ;

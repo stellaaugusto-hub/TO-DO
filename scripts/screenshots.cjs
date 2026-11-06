@@ -35,6 +35,7 @@ const shots = {
   async '25-deja-connectee'(page) { await page.goto(BASE + '?phase=main&fresh=1&login=already'); await page.waitForTimeout(900); await page.click('text=Connecter Google'); await page.waitForTimeout(900); },
   async '26-echec-detail'(page) { await page.goto(BASE + '?phase=main&fresh=1&login=fail'); await page.waitForTimeout(900); await page.click('text=Connecter Google'); await page.waitForTimeout(3600); },
   async '27-agenda-erreur'(page) { await page.goto(BASE + '?phase=main&tab=agenda&noevents=1'); await page.waitForTimeout(1300); },
+  async '28-todo-ads'(page) { await page.goto(BASE + '?phase=main&tab=ads'); await page.waitForTimeout(1300); },
 };
 
 (async () => {

@@ -30,7 +30,9 @@ function TaskProps({ task, columns, tagColors }) {
   return out;
 }
 
-function NewRow({ placeholder = 'Nouvelle quête… ex. « Appeler Marc demain 10h »', extra = {} }) {
+function NewRow({ placeholder = 'Nouvelle quête… ex. « Appeler Marc demain 10h »', extra: extraProp = {} }) {
+  const onAds = useApp((st) => st.tab === 'ads');
+  const extra = onAds ? { tags: ['ads'], ...extraProp } : extraProp;
   const [text, setText] = useState('');
   const toast = useApp((s) => s.toast);
   const due = text.trim() ? parseDue(text) : null;
@@ -352,18 +354,25 @@ function BoardView({ tasks, doneTasks }) {
   );
 }
 
-export function TodoView() {
+export const isAdsTask = (t) => (t.tags || []).includes('ads');
+
+/** To-do Ads : la même to-do, limitée aux quêtes publicitaires (tag « ads »). */
+export function AdsView() {
+  return <TodoView pageId="ads" only={isAdsTask} subtitle="Tes quêtes publicitaires : production d'ads, alertes Meta / Google Ads, demandes de l'équipe. Triées par urgence." />;
+}
+
+export function TodoView({ pageId = 'todo', only = null, subtitle = "Tout ce que tu as à faire, trié automatiquement : en retard → aujourd'hui → demain → plus tard." } = {}) {
   const { data, setPaletteOpen, newTask, setPasteOpen } = useApp();
   const prefs = usePrefs();
   const v = prefs.todo;
-  const srcFilter = (t) => v.source === 'all' || (t.source || 'manual') === v.source;
+  const srcFilter = (t) => (v.source === 'all' || (t.source || 'manual') === v.source) && (!only || only(t));
   const open = data.tasks.filter((t) => t.status !== 'done' && srcFilter(t));
   const done = data.tasks.filter((t) => t.status === 'done' && srcFilter(t)).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
   const groups = useMemo(() => groupBy(open, v.groupBy), [open, v.groupBy]);
 
   return (
     <div>
-      <PageHeader id="todo" subtitle="Tout ce que tu as à faire, trié automatiquement : en retard → aujourd'hui → demain → plus tard.">
+      <PageHeader id={pageId} subtitle={subtitle}>
         <div className="db-head">
           {VIEWS.map((x) => (
             <button key={x.id} className={`view-tab ${v.view === x.id ? 'on' : ''}`} onClick={() => savePrefs({ todo: { view: x.id } })}><x.icon size={15} />{x.label}</button>

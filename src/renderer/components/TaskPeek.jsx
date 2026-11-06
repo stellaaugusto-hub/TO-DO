@@ -49,7 +49,7 @@ export function TaskPeek() {
 
   useEffect(() => {
     if (existing) setDraft(structuredClone(existing));
-    else if (creating) setDraft({ title: '', description: '', notes: '', priority: 3, difficulty: 2, dueAt: null, tags: [], subtasks: [], color: 'default', emoji: '🎯', icon: 'target', source: 'manual', stage: 'todo', pinned: false });
+    else if (creating) setDraft({ title: '', description: '', notes: '', priority: 3, difficulty: 2, dueAt: null, tags: useApp.getState().tab === 'ads' ? ['ads'] : [], subtasks: [], color: 'default', emoji: '🎯', icon: 'target', source: 'manual', stage: 'todo', pinned: false });
     else setDraft(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedId, creating]);

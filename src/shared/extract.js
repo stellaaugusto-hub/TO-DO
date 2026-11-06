@@ -29,7 +29,10 @@ const AUTOMATED_SUBJECT = [
   /^(your|votre|ton) (receipt|recu|facture|invoice|order|commande|reservation|booking|abonnement|subscription)\b/,
   /\b(newsletter|webinar|webinaire|digest hebdo|weekly digest)\b/,
   /^(rappel|reminder) ?: .*(@|\d{1,2}[:h]\d{2})/, // rappels d'agenda
+  /^((register|till|cash|caisse) )?(closure|cloture|z) report\b|^(daily|weekly|monthly|end of day|eod) (report|summary|recap)\b|^rapport (journalier|quotidien|hebdomadaire|mensuel|de cloture|de caisse)\b/,
 ];
+// Corps d'une invitation ou d'une réponse Google Agenda (déjà dans l'agenda, pas une tâche)
+const CALENDAR_BODY = /(participer avec google meet|join with google meet|rejoindre avec google meet|invitation from google calendar|invitation de google agenda|google calendar invitation)/;
 const ASSIGNMENT = /(assigned (this )?(task )?to you|you('ve| have) been assigned|has assigned you|assigned you|vous a assigne|t'a assigne|vous a ete assigne|nouvelle tache assignee|a assigne une tache)/;
 
 /** Compare deux adresses en ignorant les points de la partie locale (prenom.nom = prenomnom). */
@@ -73,6 +76,7 @@ export function classifyMessage(msg, { userEmail, userName } = {}) {
   if (h['x-autoreply'] || h['x-autorespond'] || /oof|autoreply/i.test(h['x-auto-response-suppress'] || '') && /^(re: )?(absence|out of office|automatic)/.test(subject)) return { skip: 'auto-reply' };
   if (h['list-unsubscribe'] && !colleague) return { skip: 'newsletter' };
   for (const re of AUTOMATED_SUBJECT) if (re.test(subject)) return { skip: 'automated-subject' };
+  if (CALENDAR_BODY.test(body.slice(0, 6000)) && /(invites|guests|organisateur|organizer)/.test(body.slice(0, 6000))) return { skip: 'calendar' };
   const links = (body.match(/https?:\/\//g) || []).length;
   if (/(unsubscribe|desinscri|desabonn|se desinscrire|gerer (mes|vos) preferences)/.test(body) && links >= 4) return { skip: 'newsletter' };
   if (/(voir (la )?version (en ligne|web)|view (it |this email )?in (your )?browser|afficher dans (le|votre) navigateur)/.test(body)) return { skip: 'newsletter' };
@@ -98,7 +102,8 @@ function splitSentences(text) {
 export function segment(body) {
   const units = [];
   const paragraphs = body.split(/\n\s*\n/);
-  for (const para of paragraphs) {
+  for (const [paraIndex, para] of paragraphs.entries()) {
+    const before = units.length;
     const rawLines = para.split('\n').filter((l) => l.trim());
     const lines = rawLines.map((l) => l.trim());
     let buf = [];
@@ -110,6 +115,7 @@ export function segment(body) {
     };
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
+      if (/^@\p{Lu}/u.test(line)) flush(); // « @Stella … » : nouvelle demande, nouvelle phrase
       const isBullet = BULLET.test(line);
       const prev = units[units.length - 1];
       if (isBullet) {
@@ -162,6 +168,7 @@ export function segment(body) {
     flush();
     const last = units[units.length - 1];
     if (last && last.type === 'list') last._open = false;
+    for (let k = before; k < units.length; k++) units[k].para = paraIndex;
   }
   return units.map(({ _open, _para, ...u }) => u);
 }
@@ -195,7 +202,7 @@ const REQUESTS = [
   { re: /^(je te remercie de bien vouloir |je vous remercie de bien vouloir |merci de bien vouloir |merci de |merci d')/, score: 3.5, needsVerb: true },
   { re: /^(je te |je vous )(laisse |demande de |demande d'|demanderais de |prie de |prie d'|serais reconnaissant de |charge de )/, score: 3.5 },
   { re: /^(je compte sur (toi|vous) pour |a (toi|vous) de |a (toi|vous) d'|c'est a (toi|vous) de |c'est a (toi|vous) d'|ce serait (top|super|bien|cool|genial|parfait|ideal) (de |d'|que tu |que vous |si tu |si vous ))/, score: 3.5 },
-  { re: /^(il faut|il faudrait|faudrait|faut|il va falloir|va falloir)( absolument| vraiment| juste| aussi)? que (tu |vous )/, score: 3.5, subj: true },
+  { re: /^(il faut|il faudrait|il faudra|faudrait|faudra|faut|il va falloir|va falloir)( absolument| vraiment| juste| aussi| donc| ensuite)? que (tu |vous )/, score: 3.5, subj: true },
   { re: /^(il faut|il faudrait|faudrait|faut|il va falloir|va falloir)( absolument| vraiment| juste| aussi)? (qu'on |que l'on |que nous )/, score: 2.5, subj: true },
   { re: /^(il faut|il faudrait|faudrait|faut|il va falloir|va falloir)( absolument| vraiment| juste| aussi)? /, score: 3 },
   { re: /^(tu |vous )(dois|devrais|devez|devriez|devras|devrez|vas devoir|allez devoir|as a|avez a|vas|allez) /, score: 3 },
@@ -300,7 +307,7 @@ export function analyzeSentence(sentence, ctx = {}) {
   let addressedToMe = false;
   // « @Stella Augusto peux-tu… », « @stella.augusto », « Hello @Stella, … » : Prénom Nom en entier
   const stripMention = () => {
-    const mention = s.match(/^@(\p{Lu}[\p{L}'’-]*(?:[ .]\p{Lu}[\p{L}'’-]*){0,2}|[\p{L}][\p{L}.\-]{0,30}?)(?=[\s,:;!?]|$)[\s,:;]*/u);
+    const mention = s.match(/^@(\p{Lu}[\p{L}'’-]*(?:[ .]\p{Lu}[\p{L}'’-]*){0,2}|[\p{L}][\p{L}.\-]{0,30}?)(?=[\s,:;!?<]|$)(?:\s*<[^>\s]+>)?[\s,:;]*/u);
     if (!mention) return false;
     const target = fold(mention[1]).split(/[\s.]/)[0];
     if (ctx.userFirstName && target !== fold(ctx.userFirstName) && !/^(all|tous|tout|everyone|here|channel|equipe|team)$/.test(target)) addressedToOther = true;
@@ -327,6 +334,14 @@ export function analyzeSentence(sentence, ctx = {}) {
       if (/^merci (de|d')/.test(f0) || /^thanks? (for|to)/.test(f0)) break;
       s = s.slice(m[0].length); changed = true; continue;
     }
+    // Vocatif à plusieurs : « Lara / Sarah, je vous laisse… », « Paul et Marie, … »
+    const vocs = s.match(/^([A-ZÀ-Ý][\p{L}-]+)((?:\s*(?:\/|&|,|\bet\b|\band\b)\s*[A-ZÀ-Ý][\p{L}-]+)+)\s*,\s+(?=\S)/u);
+    if (vocs) {
+      const names = [vocs[1], ...vocs[2].split(/\s*(?:\/|&|,|\bet\b|\band\b)\s*/)].map((x) => fold(x.trim())).filter(Boolean);
+      if (ctx.userFirstName && !names.includes(fold(ctx.userFirstName))) addressedToOther = true;
+      else if (ctx.userFirstName) addressedToMe = true;
+      s = s.slice(vocs[0].length); changed = true; continue;
+    }
     // Vocatif : « Paul, peux-tu… »
     const voc = s.match(/^([A-ZÀ-Ý][\p{L}-]+)\s*,\s+(?=\S)/u);
     if (voc && !/^(Bonjour|Hello|Salut|Merci|Ok|Oui|Non|Alors|Donc|Sinon|Enfin|Aussi|Bref|Top|Super|Parfait|Cool|Yes|Hi|Hey|Thanks)$/i.test(voc[1])) {
@@ -340,8 +355,17 @@ export function analyzeSentence(sentence, ctx = {}) {
     }
   }
 
+  // Pas de destinataire dans la phrase : on reprend celui de la phrase précédente du même paragraphe
+  // (« @Sarah chaque centre peut inviter 3 clients. Peux-tu tenir le fichier ? » -> pour Sarah)
+  if (!addressedToMe && !addressedToOther) {
+    if (ctx.inherit === 'other') addressedToOther = true;
+    if (ctx.inherit === 'me') addressedToMe = true;
+  }
+  const to = addressedToMe ? 'me' : addressedToOther ? 'other' : null;
+  if (ctx.onlyMine && !addressedToMe) return { score: -4, title: null, why: ['pas-pour-moi'], to };
+
   const f = fold(s);
-  if (!f || GREETING_ONLY.test(f)) return { score: -6, title: null, why: ['salutation'] };
+  if (!f || GREETING_ONLY.test(f)) return { score: -6, title: null, why: ['salutation'], to };
   const lang = ctx.lang || detectLang(s);
 
   // « Dites-moi ce que vous en pensez », « je vous laisse faire vos retours » -> donner son avis
@@ -355,7 +379,8 @@ export function analyzeSentence(sentence, ctx = {}) {
     if (score >= THRESHOLD) return { score, title: truncate(title, 90), subtasks: [], extra: [], why: ['avis'], due: parseDue(s, ctx.now || new Date()), flags, verb: { inf: 'donner' }, sentence: sentence.trim(), difficulty: 2 };
   }
 
-  if (/^(veuillez trouver|vous trouverez|tu trouveras|tu trouveras|please find|find attached|you will find|you'll find|je vous prie de trouver|je te prie de trouver)/.test(f)) {
+  if (/^(veuillez trouver|vous trouverez|tu trouveras|tu trouveras|please find|find attached|you will find|you'll find|je vous prie de trouver|je te prie de trouver)/.test(f)
+    || /^(please )?(see|voir|vois|voyez|cf\.?|check out|refer to)\b.{0,60}\b(below|attached|above|ci-dessous|ci-dessus|ci-joint|en pj|en piece jointe)\b/.test(f)) {
     return { score: -3, title: null, why: ['pj'] };
   }
 
@@ -366,6 +391,7 @@ export function analyzeSentence(sentence, ctx = {}) {
     const m = f.match(r.re);
     if (m && m[0].trim()) {
       if (r.question && !/\?\s*$/.test(s.trim())) continue;
+      if (r.question && /^(se (voir|poser|caler|parler|appeler|retrouver|capter|rappeler)|faire (un|une) (point|call|appel|visio|reunion)|en (parler|discuter)|meet|talk|catch up|have a (call|chat))\b/.test(f.slice(m[0].length))) continue;
       req = r;
       core = s.slice(m[0].length).trim();
       score += r.score;
@@ -454,11 +480,74 @@ export function analyzeSentence(sentence, ctx = {}) {
   if ((s.match(/\)/g) || []).length > (s.match(/\(/g) || []).length) { score -= 2; why.push('fragment'); }
   if (ctx.listBoost) score += ctx.listBoost;
 
-  if (score < THRESHOLD || !verb) return { score, title: null, why, due, flags };
+  if (score < THRESHOLD || !verb) return { score, title: null, why, due, flags, to };
 
   const built = buildTitle(verb, { ...ctx, lang: verb.lang || lang, due });
-  if (!built.title || wordCount(built.title) < 1) return { score, title: null, why: [...why, 'titre-vide'], due, flags };
-  return { score, why, due, flags, verb, ...built, sentence: sentence.trim() };
+  if (!built.title || wordCount(built.title) < 1) return { score, title: null, why: [...why, 'titre-vide'], due, flags, to };
+  return { score, why, due, flags, verb, ...built, sentence: sentence.trim(), to };
+}
+
+/**
+ * Plan de priorités d'un responsable (« *Priorité 1 (d'ici le 13/11) : Black friday* » suivi
+ * de puces) : une quête par priorité, ses puces en sous-étapes, son échéance.
+ */
+export function extractPlan(body, { now = new Date(), subject = '' } = {}) {
+  const lines = body.split('\n');
+  const HEAD = /^priorit(?:e|é|y)\s*(\d+)\s*(?:\(([^)]*)\))?\s*:\s*(.*)$/i;
+  const clean = (t) => t.replace(/\*/g, '').replace(/https?:\/\/\S+/g, '').replace(/\(?\s*cc\.?\s*@[^)]*\)?/gi, '').replace(/<[^>\s]+@[^>\s]+>/g, '').replace(/\s+/g, ' ').replace(/[\s:;,.-]+$/, '').trim();
+  const sections = [];
+  let cur = null;
+  let inHeading = false;
+  for (const raw of lines) {
+    const line = raw.replace(/^[\s>]*/, (m) => m.replace(/>/g, ''));
+    const plain = line.replace(/\*/g, '').trim();
+    const h = plain.match(HEAD);
+    if (h) {
+      cur = { n: +h[1], when: h[2] || '', title: h[3].trim(), items: [], text: [plain] };
+      sections.push(cur);
+      inHeading = true;
+      continue;
+    }
+    if (!cur) continue;
+    if (!plain) { inHeading = false; continue; }
+    cur.text.push(plain);
+    const bullet = line.match(/^(\s*)[-•▪◦]\s+(.*)$/) || line.match(/^(\s*)\*\s+(.*)$/);
+    if (bullet) {
+      inHeading = false;
+      const indent = bullet[1].length;
+      if (cur.baseIndent === undefined) cur.baseIndent = indent;
+      if (indent <= cur.baseIndent) cur.items.push(bullet[2]);
+      continue;
+    }
+    if (inHeading && !/^\*/.test(line.trim())) { cur.title += ` ${plain}`; continue; }
+    inHeading = false;
+    // suite d'une puce coupée sur deux lignes
+    if (/^\s{2,}/.test(raw) && cur.items.length) cur.items[cur.items.length - 1] += ` ${plain}`;
+  }
+  if (sections.length < 2) return [];
+  const adsMail = /\bads?\b|publicit/i.test(subject);
+  return sections.map((sec) => {
+    let title = clean(sec.title.replace(/\s*\([^)]*\)?\s*$/, '')) || clean(sec.items[0] || '');
+    if (!title) return null;
+    if (adsMail && !/\bads?\b/i.test(title) && wordCount(title) <= 4) title = `Ads ${title}`;
+    const d = parseDue(sec.when, now);
+    const low = /moins urgent|pas urgent|low priority/i.test(sec.text.join(' '));
+    const subtasks = sec.items
+      .map((it) => { const c = clean(it); const head = c.split(/\s:\s/)[0]; return wordCount(head) >= 2 && (head.match(/\(/g) || []).length === (head.match(/\)/g) || []).length ? head : c; })
+      .filter((x) => x && wordCount(x) >= 1)
+      .map((x) => truncate(capitalize(x), 80));
+    return {
+      title: truncate(capitalize(title), 90),
+      description: sec.text.join('\n').slice(0, 1200),
+      subtasks: subtasks.map((x) => ({ title: x })),
+      dueAt: d.due && d.phrase ? new Date(d.due).toISOString() : null,
+      urgency: null,
+      priority: low ? 4 : sec.n <= 2 ? 2 : 3,
+      verbInf: null,
+      confidence: 0.8,
+      plan: true,
+    };
+  }).filter(Boolean);
 }
 
 // ---------------------------------------------------------------------------
@@ -701,17 +790,22 @@ const ADS_PLATFORMS = [
   ['Microsoft Ads', /(^|\.)microsoft\.com$/, /ads|advertising|bingads/],
 ];
 const ADS_ACTION = /(refus|rejet|desapprouv|non approuv|disapprov|rejected|not approved|desactiv|suspend|restreint|restrict|disabled|bloque|blocked|paiement|payment|facturation|billing|carte bancaire|credit card|echoue|failed|declined|action requise|action required|action needed|intervention requise|verifi|verify|confirm(e|ez|er)? (votre|your)|limite de depense|spending limit|budget (epuise|atteint)|out of budget|regles publicitaires|ad polic|policy|violation|non conforme)/;
+const SERVICE_ACTION = /(paiement (a |est )?(echoue|refuse|rejete)|echec (du|de) paiement|payment (failed|declined|unsuccessful)|mettre a jour (vos|tes) (informations|coordonnees|moyen) de (paiement|facturation)|update (your )?payment|action requise|action required|action needed|compte (suspendu|desactive|bloque|restreint)|account (suspended|disabled|restricted|locked)|carte (bancaire )?(expiree|expire bientot)|card (expired|expiring))/;
 const ADS_INFO = /(est (maintenant )?(en ligne|active|approuvee?)|is (now )?(live|active|approved)|rapport|report|performance|resultats|results|recu |receipt|facture disponible|invoice (is )?available|astuce|tips?|webinar|nouveaute|what's new|recap|resume hebdo|weekly)/;
 
 /** Mail automatique d'une régie pub qui demande une action -> une quête « ads ». */
 function adsAlertTask(msg, now) {
   const fromEmail = fold(msg.from?.email || '');
   const [local, domain = ''] = fromEmail.split('@');
-  const platform = ADS_PLATFORMS.find(([, d, l]) => d.test(domain) && (!l || l.test(local) || l.test(fold(msg.subject || ''))));
-  if (!platform) return null;
+  let platform = ADS_PLATFORMS.find(([, d, l]) => d.test(domain) && (!l || l.test(local) || l.test(fold(msg.subject || ''))));
   const subject = (msg.subject || '').replace(/^((re|tr|fw|fwd)\s*:\s*)+/i, '').trim();
   const fs = fold(subject);
-  if (!ADS_ACTION.test(fs) || ADS_INFO.test(fs)) return null;
+  if (!platform) {
+    // Autre service (outil social, logiciel…) : seulement les alertes fortes (paiement, action requise, compte)
+    if (!SERVICE_ACTION.test(fs) || ADS_INFO.test(fs) || /newsletter|webinar|webinaire|promo|offre/.test(fs)) return null;
+    const name = (msg.from?.name || '').replace(/["']/g, '').trim() || capitalize(domain.split('.').slice(-2, -1)[0] || 'Service');
+    platform = [name];
+  } else if (!ADS_ACTION.test(fs) || ADS_INFO.test(fs)) return null;
   const due = new Date(now);
   due.setHours(18, 0, 0, 0);
   if (due < now) due.setTime(now.getTime() + 2 * 3600e3);
@@ -723,7 +817,7 @@ function adsAlertTask(msg, now) {
     dueAt: due.toISOString(),
     priority: urgent ? 2 : 3,
     difficulty: 2,
-    tags: ['ads'],
+    tags: ADS_PLATFORMS.some(([n]) => n === platform[0]) ? ['ads'] : guessTags(subject),
     icon: 'megaphone',
     color: 'orange',
     confidence: 0.9,
@@ -783,7 +877,13 @@ export function extractTasks(msg, opts = {}) {
   const subjDue = parseDue(subject, now);
   const subjectUrgent = subjDue.urgency === 'urgent';
 
-  const baseCtx = { now, lang, senderFirstName: contextSender, userFirstName, subject: fwdSubject || subject, notForMe, source };
+  // Mail qui répartit les tâches avec des @mentions (« @Lara peux-tu… @Stella peux-tu… ») :
+  // si l'une d'elles est pour moi, je ne garde que les miennes.
+  const mentionFirsts = [...body.matchAll(/(?:^|\n)\s*@(\p{Lu}[\p{L}'’-]*)/gu)].map((m) => fold(m[1]));
+  const mentionsMeFirst = !!userFirstName && mentionFirsts.includes(fold(userFirstName));
+  const mentionsOthers = mentionFirsts.filter((n) => !userFirstName || n !== fold(userFirstName)).length;
+  let onlyMine = mentionsMeFirst && mentionsOthers > 0;
+  const baseCtx = { now, lang, senderFirstName: contextSender, userFirstName, subject: fwdSubject || subject, notForMe: notForMe + (!mentionsMeFirst && mentionsOthers >= 2 ? 2 : 0), source };
   const found = [];
   const push = (res, extra = {}) => {
     const due = res.due?.due || extra.due || null;
@@ -811,11 +911,26 @@ export function extractTasks(msg, opts = {}) {
     if (t) found.push({ title: truncate(capitalize(t), 90), description: subject, subtasks: [], dueAt: subjDue.due ? subjDue.due.toISOString() : null, urgency: subjDue.urgency, verbInf: null, confidence: 0.7 });
   }
 
+  // Plan de priorités envoyé directement (« Priorité 1 : … », « Priorité 2 : … »)
+  if (source === 'mail' && userInTo && !greetedOthers) {
+    // texte d'origine (retraits des puces conservés), sans l'historique cité
+    const own = (msg.text || body).split(/\n(?=>|(?:Le|On) [^\n]{5,160}(?:\n[^\n]{0,60})?(?:a [ée]crit|wrote)\s*:)/)[0];
+    const plan = extractPlan(own, { now, subject: fwdSubject || subject });
+    if (plan.length) {
+      found.push(...plan);
+      onlyMine = true; // le reste du mail : seulement ce qui m'est adressé nommément
+    }
+  }
+
   const units = segment(body);
+  let inherit = null;
+  let curPara = null;
   for (let i = 0; i < units.length; i++) {
     const u = units[i];
+    if (u.para !== curPara) { inherit = null; curPara = u.para; }
     if (u.type === 'sentence') {
-      const res = analyzeSentence(u.text, baseCtx);
+      const res = analyzeSentence(u.text, { ...baseCtx, inherit, onlyMine });
+      if (res.to) inherit = res.to;
       if (res.title) {
         // « C'est pour ce soir ! » juste après : on rattache l'échéance
         const next = units[i + 1];
@@ -837,6 +952,7 @@ export function extractTasks(msg, opts = {}) {
       continue;
     }
     // Listes
+    if (onlyMine || inherit === 'other') continue;
     const introRes = u.intro ? analyzeSentence(u.intro.replace(/:\s*$/, ''), baseCtx) : null;
     const introDue = u.intro ? parseDue(u.intro, now) : { due: null };
     const isTodoHeader = u.intro && TODO_HEADER.test(fold(u.intro.replace(/:\s*$/, '').trim()));
@@ -863,10 +979,17 @@ export function extractTasks(msg, opts = {}) {
     if (soft) found.push({ ...soft, subtasks: [], dueAt: null, urgency: null, confidence: 0.55 });
   }
 
+  // « L'envoyer à Sarah » : le pronom désigne l'objet du mail -> « Envoyer à Sarah (Soirée top clients…) »
+  const cleanSubject = (fwdSubject || subject).replace(/^((re|tr|fw|fwd)\s*:\s*)+/i, '').trim();
+  for (const t of found) {
+    const m = t.title.match(/^(l'|l’|le |la |les )(\p{L}+(?:er|ir|re))\b(.*)$/iu);
+    if (m && cleanSubject && !t.plan) t.title = truncate(`${capitalize(m[2])}${m[3]} (${cleanSubject})`, 90);
+  }
+
   // Dédoublonnage
   const tasks = [];
   for (const t of found) {
-    const dup = tasks.find((x) => similarity(x.title, t.title) >= 0.75);
+    const dup = tasks.find((x) => (x.plan && t.plan ? x.title === t.title : similarity(x.title, t.title) >= 0.75));
     if (dup) {
       if (!dup.dueAt && t.dueAt) dup.dueAt = t.dueAt;
       continue;
@@ -878,7 +1001,10 @@ export function extractTasks(msg, opts = {}) {
     skipped: null,
     tasks: tasks.map((t) => {
       const tags = guessTags(t.title + ' ' + t.description + ' ' + t.subtasks.map((s) => s.title).join(' '));
-      const priority = computePriority({ urgency: t.urgency, due: t.dueAt, now });
+      // Contexte publicitaire : canal Chat « créa / ads / growth… » ou mail dont l'objet parle d'ads
+      const adsContext = /\b(ads?|pubs?|publicit\w*|cr[ée]as?|growth|acquisition|paid|meta ads|google ads)\b/i.test(`${msg.space || ''} ${fwdSubject || subject}`);
+      if (adsContext && !tags.includes('ads')) tags.unshift('ads');
+      const priority = t.priority || computePriority({ urgency: t.urgency, due: t.dueAt, now });
       return {
         title: t.title,
         description: t.description,

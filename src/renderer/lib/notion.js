@@ -78,6 +78,7 @@ export const ACCENTS = {
 export const PAGES = [
   { id: 'quests', title: 'Quêtes du jour', emoji: '🎯', cover: 'nude' },
   { id: 'todo', title: 'To-do', emoji: '✅', cover: null },
+  { id: 'ads', title: 'To-do Ads', emoji: '📣', cover: null },
   { id: 'agenda', title: 'Agenda', emoji: '📅', cover: null },
   { id: 'done', title: 'Terminées', emoji: '🏆', cover: null },
 ];

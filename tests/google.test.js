@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import zlib from 'node:zlib';
-import { parseRaw, parseAtom, idTime, rowToMessage } from '../src/main/google/gmail.js';
+import { parseRaw, parseAtom, idTime, rowToMessage, quotedHistory } from '../src/main/google/gmail.js';
 import { mentionsMe, cleanMention } from '../src/main/google/chat.js';
 import { eventsFromZip, templateUrl, assistUrl, parseChipText, eventsFromChips, textShape } from '../src/main/google/calendar.js';
 import { parseIcs, expandCalendar, zonedToUtc, calendarIdFromFile, parseLine } from '../src/main/google/ics.js';
@@ -67,6 +67,24 @@ describe('Gmail (lu dans Chrome)', () => {
       <link rel="alternate" href="https://mail.google.com/mail?account_id=a@b.fr&amp;message_id=19a2f3b4c5d6e7f8&amp;view=conv&amp;extsrc=atom" type="text/html" />
       <issued>2026-10-28T09:00:00Z</issued><author><name>Léa</name><email>lea@x.fr</email></author></entry></feed>`;
     expect(parseAtom(xml)).toEqual([{ id: '19a2f3b4c5d6e7f8', threadId: '19a2f3b4c5d6e7f8', subject: 'Brief & planning', snippet: 'Peux-tu valider le planning ?', fromName: 'Léa', fromEmail: 'lea@x.fr', time: Date.UTC(2026, 9, 28, 9) }]);
+  });
+});
+
+describe('Gmail : fil de discussion retrouvé dans les citations', () => {
+  // Dernier message du fil = ta propre réponse ; les demandes sont plus haut, citées.
+  const last = "Hello Sophie,\n\nTu trouveras en pièce jointe l'invitation.\n\nStella\n\nLe ven. 6 nov. 2026 à 09:36, Claire Morel <claire.morel@innerskin.fr> a\nécrit :\n\n> Aux clients invités en centre. Il faudra que tu l’envoies à Sophie.\n>\n> Merci\n>\n> Le ven. 6 nov. 2026 à 09:09, Stella Augusto <stella.augusto@innerskin.fr>\n> a écrit :\n>\n>> Oui pas de soucis je prépare ça.\n>>\n>> Le ven. 6 nov. 2026 à 08:34, Claire Morel <claire.morel@innerskin.fr>\n>> a écrit :\n>>\n>>> Hello à tous,\n>>>\n>>> @Stella Augusto <stella.augusto@innerskin.fr> peux-tu préparer une\n>>> invitation digitale ce matin ?\n>>>\n>>> Merci,\n>>> Claire\n\n--";
+  it('retrouve chaque message cité avec son auteur', () => {
+    const h = quotedHistory(last);
+    expect(h.map((q) => [q.depth, q.fromEmail, q.text.split('\n')[0]])).toEqual([
+      [1, 'claire.morel@innerskin.fr', 'Aux clients invités en centre. Il faudra que tu l’envoies à Sophie.'],
+      [2, 'stella.augusto@innerskin.fr', 'Oui pas de soucis je prépare ça.'],
+      [3, 'claire.morel@innerskin.fr', 'Hello à tous,'],
+    ]);
+  });
+  it('les demandes du fil deviennent des quêtes, pas mes propres réponses', () => {
+    const now = new Date(2026, 10, 6, 8);
+    const titles = quotedHistory(last).flatMap((q) => extractTasks({ source: 'mail', from: { name: q.fromName, email: q.fromEmail }, subject: 'Re: Soirée clients', text: q.text, headers: {} }, { userEmail: 'stella.augusto@innerskin.fr', userName: 'Stella', now }).tasks.map((t) => t.title));
+    expect(titles).toEqual(['Envoyer à Sophie (Soirée clients)', 'Préparer une invitation digitale']);
   });
 });
 

@@ -19,7 +19,7 @@ export function Sidebar() {
   const { data, tab, setTab, setPaletteOpen, newTask } = useApp();
   const prefs = usePrefs();
   const quests = todaysQuests(data.tasks);
-  const counts = { quests: quests.length, todo: data.tasks.filter((t) => t.status !== 'done').length, done: data.tasks.filter((t) => t.status === 'done').length };
+  const counts = { quests: quests.length, todo: data.tasks.filter((t) => t.status !== 'done').length, ads: data.tasks.filter((t) => t.status !== 'done' && (t.tags || []).includes('ads')).length, done: data.tasks.filter((t) => t.status === 'done').length };
   const hot = quests.some((q) => q.priority === 1 || (q.dueAt && new Date(q.dueAt) < new Date()));
   const lvl = levelInfo(data.stats.xp);
   const streak = currentStreak(data.stats);

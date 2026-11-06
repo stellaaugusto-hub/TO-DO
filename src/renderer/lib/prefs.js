@@ -11,7 +11,14 @@ export function getPrefs(settings = {}) {
   return {
     appearance: { ...DEFAULT_APPEARANCE, ...(settings.appearance || {}) },
     pages,
-    pageOrder: settings.pageOrder?.length ? settings.pageOrder.filter((id) => pages[id]) : PAGES.map((p) => p.id),
+    pageOrder: settings.pageOrder?.length
+      ? (() => {
+          const order = settings.pageOrder.filter((id) => pages[id]);
+          // pages ajoutées par une mise à jour : insérées après leur voisine d'origine
+          for (const [i, p] of PAGES.entries()) if (!order.includes(p.id)) order.splice(Math.max(0, order.indexOf(PAGES[i - 1]?.id) + 1), 0, p.id);
+          return order;
+        })()
+      : PAGES.map((p) => p.id),
     todo: { ...DEFAULT_TODO, ...(settings.todo || {}) },
     tagColors: settings.tagColors || {},
   };

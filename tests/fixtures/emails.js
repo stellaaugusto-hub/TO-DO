@@ -21,6 +21,57 @@ const DISCLAIMER_EN = `
 CONFIDENTIALITY NOTICE: This email and any attachments are intended solely for the use of the addressee. If you have received this email in error, please notify the sender immediately and delete it from your system. Please consider the environment before printing this email.`;
 
 export const EMAILS = [
+  // --- Formats réels de Gmail (noms et contenus changés) -------------------------------
+  {
+    name: 'mail d’équipe : chacun sa tâche par @mention « @Prénom Nom <adresse> », lignes coupées -> seulement la mienne',
+    msg: {
+      from: { name: 'Claire Morel', email: 'claire.morel@innerskin.fr' }, to: 'lina@innerskin.fr, stella.augusto@innerskin.fr, sophie@innerskin.fr, sam@innerskin.fr', cc: 'direction@innerskin.fr',
+      subject: 'Soirée clients au Grand Hôtel - 18 novembre',
+      text: "Hello à tous,\n\nNous organisons une soirée clients au Grand Hôtel le 18 novembre. Les\ndétails sont ci-dessous :\n\nINVITÉS\nNous pouvons en inviter 25. Partons sur 40 confirmés (y\ncompris les +1).\n@Lina Roy <lina@innerskin.fr> peux-tu préparer une NL pour nos\nclients ce matin ? On fait comme la dernière fois (en batch)\n@Stella Augusto <stella.augusto@innerskin.fr> peux-tu préparer une\ninvitation digitale ce matin ?\n@Sophie Petit <sophie@innerskin.fr> chaque centre peut\ninviter 3 clients (idéalement pas les mêmes que la dernière fois).\nPeux-tu tenir le fichier de suivi des clients ?\nLina / Sophie, je vous laisse vous coordonner pour qu'au total on fait à 40\nconfirmés.\n\nA APPORTER\n@Sam Blanc <sam@innerskin.fr> peux-tu en mettre 40\nde coté avec sac de noel + carte des soins\n\nPuis il faut prévoir :\n- les testeurs\n- quelques cartes des soins\n\nMerci,\nClaire",
+    },
+    expect: { tasks: [{ title: 'Préparer une invitation digitale', due: '2026-10-28T12:00' }] },
+  },
+  {
+    name: 'relance dans le fil : « Il faudra que tu l’envoies à Sophie » -> le pronom renvoie au sujet',
+    msg: { from: { name: 'Claire Morel', email: 'claire.morel@innerskin.fr' }, to: 'stella.augusto@innerskin.fr', subject: 'Re: Soirée clients au Grand Hôtel - 18 novembre', text: 'Aux clients invités en centre. Il faudra que tu l’envoies à Sophie.\n\nMerci' },
+    expect: { tasks: [{ title: 'Envoyer à Sophie (Soirée clients au Grand Hôtel - 18 novembre)' }] },
+  },
+  {
+    name: 'plan de priorités d’un responsable (*Priorité N (d’ici le …) : …* + puces) -> une quête ads par priorité',
+    msg: {
+      from: { name: 'Bruno Lefort', email: 'bruno.lefort@innerskin.fr' }, to: 'stella.augusto@innerskin.fr, lina@innerskin.fr', cc: 'claire.morel@innerskin.fr', subject: "Priorité Production Ads - Fin d'année",
+      text: "Hello à toutes,\n\nVoici l'ordre de priorité pour produire des ads :\n\n*Priorité 1 (d'ici le 13/11) : Black friday*\n\n   - Ads Black friday (leadgen) : pour rappel, offre à 160€ / épil laser\n   : reprendre les visuels brandés\n   - Ads teasing Black friday (leadgen) : bench à venir côté\n   agence\n   - Ads BF Londres ?\n\n*Priorité 2 (ASAP, mais après les ads black friday) : *Renouveler les\naccroches d'ads pour les orienter Hiver / Fêtes de fin d'année.\n*À noter que beaucoup de nos ads sont désormais orientées pain points*\n\n   - Soin A : https://fb.me/adspreview/facebook/abc\n   - Soin B :\n      - https://fb.me/adspreview/facebook/def\n\n*Priorité 3 (d'ici le 27/11) : Ads de Noël *\n\n   - Rappel des deux offres produits retenues :\n      - DUO HIVER (1 crème achetée : 1 sérum offert)\n\n*Priorité 4 : Ads agence* (à produire dans les quantités que vous\npouvez)\n\n   - Idéalement 2 concepts par semaine\n\n*Priorité 5 : Ads Paiement en 12x*\n\n   - Combo épilation laser\n\n*Priorité 6 : Statiques / ajout d'ads ECOM*\n\n   - Moins urgent car nous avons déjà beaucoup de concepts qui tournent +\n   d'autres déjà produits\n\n*Priorité 7 : Ads Paiement en 12x BIS*\n\n   - Soin C\n\n@Claire Morel <claire.morel@innerskin.fr> Valides-tu cet ordre de\npriorité ?\n\nMerci,\n*Bruno Lefort*\n*Directeur Marketing Digital*",
+    },
+    expect: { tasks: [
+      { title: 'Ads Black friday', due: '2026-11-13', priority: 2, tags: ['ads'], subtasks: ['Ads Black friday (leadgen)', 'Ads teasing Black friday (leadgen)', 'Ads BF Londres ?'] },
+      { title: "Renouveler les accroches d'ads pour les orienter Hiver / Fêtes de fin d'année", priority: 2 },
+      { title: 'Ads de Noël', due: '2026-11-27' },
+      { title: 'Ads agence' },
+      { title: 'Ads Paiement en 12x' },
+      { title: "Statiques / ajout d'ads ECOM", priority: 4 },
+      { title: 'Ads Paiement en 12x BIS' },
+    ] },
+  },
+  {
+    name: 'réponse à une invitation Google Agenda (« On peut se poser à 18h ? ») : ignorée',
+    msg: { from: { name: 'Claire Morel', email: 'claire.morel@innerskin.fr' }, to: 'stella.augusto@innerskin.fr', subject: 'Update ads', text: "On peut se poser à 18h ? J'ai un rdv extérieur\n\nUpdate ads\nmercredi 4 nov. ⋅ 4pm – 4:30pm\n\nParticiper avec Google Meet\nhttps://meet.google.com/abc-defg-hij\n\nOrganisateur\nStella Augusto\n\nInvités\nClaire Morel" },
+    expect: { none: true, skipped: true },
+  },
+  {
+    name: 'rapport de clôture de caisse automatique : ignoré',
+    msg: { from: { name: 'Innerskin UK', email: 'hello-uk@innerskin.com' }, to: 'stella.augusto@innerskin.fr', subject: 'Register Closure Report  - London : Innerskin UK', text: 'Register Closure Report (Default) London\nCash: 120.00\nCard: 2,340.00' },
+    expect: { none: true, skipped: true },
+  },
+  {
+    name: '« See the call agenda below » : un renvoi, pas une tâche',
+    msg: { from: { name: 'Xena', email: 'xena@agence-rp.com' }, to: 'stella.augusto@innerskin.fr', subject: 'Innerskin x Agence Call Agenda', text: 'Hi all,\n\nSee the call agenda below.\n\n1. Press coverage update\n2. Christmas gifting\n\nBest,\nXena' },
+    expect: { none: true },
+  },
+  {
+    name: 'outil social : paiement échoué -> quête',
+    msg: { from: { name: 'SocialTool', email: 'no-reply@socialtool.com' }, to: 'stella.augusto@innerskin.fr', subject: 'Votre dernier paiement a échoué, veuillez mettre à jour vos informations', text: 'Bonjour, votre paiement a échoué.' },
+    expect: { tasks: [{ title: 'SocialTool : Votre dernier paiement a échoué, veuillez mettre à jour vos informations', priority: 2 }] },
+  },
   {
     name: 'alerte Meta : publicité refusée -> quête ads',
     msg: { from: { name: 'Meta for Business', email: 'advertise-noreply@support.facebookmail.com' }, to: 'stella.augusto@innerskin.fr', subject: 'Votre publicité « Hydra X – Black Friday » a été refusée', headers: { 'list-unsubscribe': '<https://facebook.com/u>' }, text: "Votre publicité ne respecte pas nos règles publicitaires. Modifiez-la puis soumettez-la à nouveau." },
@@ -371,7 +422,7 @@ export const CHATS = [
   { name: 'chat : impératif', msg: { source: 'chat', from: { name: 'Julie' }, text: 'Envoie-moi le lien du Drive stp' }, expect: { tasks: [{ title: 'Envoyer le lien du Drive à Julie' }] } },
   { name: 'chat : constat', msg: { source: 'chat', from: { name: 'Julie' }, text: "J'ai envoyé le fichier au client, c'est bon." }, expect: { none: true } },
   // Exemples réels de l'utilisatrice (canal « créa »)
-  { name: 'chat canal : « On peut lancer … aujourd’hui ? »', msg: { source: 'chat', from: { name: 'Chrystelle' }, space: 'créa', text: 'On peut lancer les nouvelles hydra x et paiement en 12 fois aujourd’hui ?' }, expect: { tasks: [{ title: 'Lancer les nouvelles hydra x et paiement en 12 fois', due: '2026-10-28' }] } },
+  { name: 'chat canal : « On peut lancer … aujourd’hui ? » (canal créa -> To-do Ads)', msg: { source: 'chat', from: { name: 'Chrystelle' }, space: 'créa', text: 'On peut lancer les nouvelles hydra x et paiement en 12 fois aujourd’hui ?' }, expect: { tasks: [{ title: 'Lancer les nouvelles hydra x et paiement en 12 fois', due: '2026-10-28', tags: ['ads'] }] } },
   { name: 'chat canal : « Est-ce qu’on peut … ? »', msg: { source: 'chat', from: { name: 'Chrystelle' }, space: 'créa', text: "Est-ce qu'on peut mettre en ligne la bannière Black Friday demain ?" }, expect: { tasks: [{ title: 'Mettre en ligne la bannière Black Friday', due: '2026-10-29' }] } },
   { name: 'chat canal : « On peut se voir demain. » (pas une question) : rien', msg: { source: 'chat', from: { name: 'Chrystelle' }, space: 'créa', text: 'On peut se dire que la campagne a bien marché.' }, expect: { none: true } },
   { name: 'chat : @Prénom Nom de l’utilisatrice', msg: { source: 'chat', from: { name: 'Paul' }, text: '@Stella Augusto tu peux relire le post LinkedIn ?' }, expect: { tasks: [{ title: 'Relire le post LinkedIn' }] } },
