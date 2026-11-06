@@ -117,8 +117,13 @@ jobs:
             node -e "const s=require('fs').readFileSync('CHANGELOG.md','utf8');const m=s.split(/^## /m).find(x=>x.startsWith('$V'));if(m)console.log('### Nouveautés\n'+m.split('\n').slice(1).join('\n').trim())" || true
           } > notes.md
           FILES="release/QuestFlow-Setup.pkg release/QuestFlow.dmg $(ls release/QuestFlow-*-mac-*.zip release/QuestFlow-*-mac-*.zip.sha256)"
-          if gh release view "v$V" --repo "$REPO" >/dev/null 2>&1; then
-            gh release upload "v$V" $FILES --clobber --repo "$REPO"
-          else
-            gh release create "v$V" $FILES --title "QuestFlow $V" --notes-file notes.md --repo "$REPO"
-          fi
+          # Jusqu'à 5 essais : une coupure réseau passagère vers api.github.com ne doit pas faire échouer la publication.
+          for i in 1 2 3 4 5; do
+            if gh release view "v$V" --repo "$REPO" >/dev/null 2>&1; then
+              gh release upload "v$V" $FILES --clobber --repo "$REPO" && break
+            else
+              gh release create "v$V" $FILES --title "QuestFlow $V" --notes-file notes.md --repo "$REPO" && break
+            fi
+            [ "$i" = 5 ] && exit 1
+            echo "Nouvel essai dans $((i * 20)) s…"; sleep $((i * 20))
+          done
